@@ -313,13 +313,6 @@ atn:
 
 ### MiniLang.tokens
 
-
-Claro, aquí tienes un **resumen claro** sobre el archivo `MiniLang.tokens`:
-
----
-
-### MiniLang.tokens
-
 Es un archivo **generado automáticamente por ANTLR** cuando compilas una gramática `.g4`. Contiene una **lista de tokens léxicos**, que son las unidades mínimas del lenguaje que ANTLR reconoce en el análisis léxico. 
 
 Tambien genera otro archivo llamado  **MiniLangLexer.tokens** que son los tokens del Lexer 
