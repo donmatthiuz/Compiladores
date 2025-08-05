@@ -363,3 +363,12 @@ c
 
 El resultado deberia ser de  25, 10 ya que como se definio en el Driver.py es que al solo colocar la variable , la captura y la imprime
 
+
+### fail_test#.txt
+Aqui se almacenan los errores cometidos. Especificamente en que token fue el error, asi describiendo el error que ocurre. Ejemplo
+
+```
+7+
+```
+
+Aqui el 7 +   no tiene el siguiente numero que deberia estar tras un + .
