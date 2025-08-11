@@ -1,5 +1,8 @@
 # 🧪 Laboratorio 2: Sistema de Tipos con ANTLR
 
+[Link al Video](https://youtu.be/mLoSNvJ__R4)
+
+
 Ejecutamos el comando para levantar el docker
 
 ![alt text](image.png)
