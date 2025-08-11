@@ -83,4 +83,23 @@ Siempre devuelve un valor de tipo IntType.
 
 ## Agregar Validadores
 
+Se agregan los validadores para POW y MOD en Listener y Visitor para validar el tipo de los operandos según las reestricciones.
+
+Los archivos de prueba son los siguientes:
+
+- PASS
+
+![alt text](image-8.png)
+
+Ejecutandolo pasa bien
+
+![alt text](image-9.png)
+
+- NO PASS
+
+![alt text](image-10.png)
+
+Al ejecutar vemos que hizo el check de tipos para las nuevas operaciones POW y MOD agregadas
+
+![alt text](image-11.png)
 

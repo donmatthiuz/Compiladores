@@ -57,9 +57,12 @@ COPY ./commands/grun /usr/bin/grun
 RUN chmod +x /usr/bin/grun
 
 # Python virtual env
+RUN apt-get update && apt-get install -y dos2unix
 COPY python-venv.sh .
+RUN dos2unix python-venv.sh
 RUN chmod +x ./python-venv.sh
 RUN ./python-venv.sh
+
 
 COPY requirements.txt .
 # Not production-intended, never do this, this is just a simple example
