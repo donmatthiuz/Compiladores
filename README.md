@@ -1,48 +1,85 @@
 # 🧪 Laboratorio 2: Sistema de Tipos con ANTLR
 
-## 📋 Descripción General
+Ejecutamos el comando para levantar el docker
 
-En este laboratorio trabajarás con **ANTLR**, un generador de analizadores sintácticos. Hemos proporcionado un `Dockerfile` para ayudarte a configurar el entorno rápidamente. Utilizaremos Python para hacer pruebas, ya que es más sencillo que Java para pruebas pequeñas.
+![alt text](image.png)
 
-Experimentarás con un sistema de tipos básico, extenderás una gramática y completarás el sistema de tipos. Con ello, aprenderás sobre la marcha lo básico al utilizar sistemas de tipos en el análisis semántico.
 
-* **Modalidad: Individual**
+Ahora generamos los archivos de lexer y parser
 
-## 🧰 Instrucciones de Configuración
+![alt text](image-1.png)
 
-1. **Construir y Ejecutar el Contenedor Docker**Desde el directorio raíz de este laboratorio, ejecuta el siguiente comando para construir la imagen y lanzar un contenedor interactivo:
+---
+## Analisis de Archivos
 
-   ```bash
-   docker build --rm . -t lab2-image && docker run --rm -ti -v "$(pwd)/program":/program lab2-image
-   ```
-2. **Entender el Entorno**
 
-   - El directorio `program` se monta dentro del contenedor.
-   - Este contiene la **gramática de ANTLR**, un archivo `Driver.py` (punto de entrada principal) y un archivo `program_test.txt` (entrada de prueba).
-   - En este caso usamos un Visitor para visitar los nodos del árbol y aplicar análisis semántico.
-   - También se  un Listener para este efecto.
-3. **Generar Archivos de Lexer y Parser:** Dentro del contenedor, compila la gramática ANTLR a Python con:
+### Archivo que pasa
 
-   ```bash
-   antlr -Dlanguage=Python3 -visitor SimpleLang.g4			*** Esto es para utilizar un Visitor ***
-   antlr -Dlanguage=Python3 -listener SimpleLang.g4		*** Y esto es para utilizar un Listener ***
-   ```
-4. **Ejecutar el Analizador**
-   Usa el driver para analizar el archivo de prueba:
+Ahora ejecutamos el analizador, y probamos para ver que 
 
-   ```bash
-   python3 Driver.py program_test_pass.txt
-   python3 DriverListener.py program_test_pass.txt
-   ```
+![alt text](image-2.png)
 
-   - ✅ Si el archivo es sintácticamente correcto y, además, no hay problemas de tipo, **se mostrará que la validación de tipos fue exitosa**.
-   - ❌ Si existen errores sintácticos, o errores de tipo, ANTLR los mostrará en la consola.
+#### Justificacion
 
-## 📋 Entregables
+El porque si lo acepta bien por el Driver lister y el visitor es porque esta bien escrita la gramatica en el archivo de prueba pass, en esta se define que una expresion que puede ser definida por un intero, string, boolean o float puede estar acompañada entre los dos por un operador.
 
-- **Deben utilizar ambos Visitor y Listener para realizar las actividades de este lab.**
-- Analice la ejecución con los archivos provistos, comente acerca de porqué el archivo "pass" si "pasa" y por qué el archivo "no pass" pues, "no pasa" lol.
-- Extienda la gramática de ANTLR para incluir otras dos operaciones, las que sean de su agrado.
-- Ahora extienda más el sistema de tipos para validar al menos otros 3 conflictos de tipos.
-- **Video de YouTube no listado** (pero público) con los resultados de ejecutar los puntos anteriores y sus comentarios.
-- Repo de Github con todo su código.
+![alt text](image-4.png)
+
+Debido a esta definicion si pasa correctamente ya que los archivos Driver y DriverLister esperan a que ocurra un error dado por sus listener y asi mostrar que no pudo pasar
+
+![alt text](image-5.png)
+
+### Archivos que no pasan
+
+Ejecutamos el archivo "program_test_no_pass", y este nos genera lo siguiente
+
+![alt text](image-3.png)
+
+
+#### Justificacion
+
+Aqui las cosas cambian porque con Driver no detecta error pero con el DriverListener si marca error , especificamente los errores que marca es que no podemos hacer divisiones con un enter y string, multiplicciones con entero y string, restas con flotante y booleano y sumas con string y numero. 
+
+Esto se debe a como se define el sistema de tipos, en el archivo DriverLister.py se llama a TypeCheckListener, y si nos vamos a ese metodo , vemos que aqui se validan ese sistema de tipos, cosa que el driver no tiene.
+
+El driver usa un visitor que lo que hace es visitar los nodos del arbol, en este solo se valida si el metodo  visitMulDiv o visitAddSub es llamado y las subexpresiones devuelven correctamente su tipo. Si por algún motivo se devuelve un tipo “aceptable” antes de tiempo, la validación nunca se dispara. En cambio el listener usa self.types para ver el tipo de cada subexpresion , lo que provoca que salte el error. Ya que guarda los tipos y luego al salir del nodo y compararlos con las funciones se da cuenta y lanza el error.
+
+Osea el listener guarda toda la info que va recolentando de los hijos y el flujo de las entradas y salidas lo maneja ANTLR en cambio el visitor se tiene que especificar en que orden recorrer el hijo o no, y por ende ocurren cosas como esta.
+
+
+---
+## Extender Gramatica
+
+
+Ahora agregaremos 2 operaciones mas la de modulo "%" y la de "**" que es la de potencia.
+
+Sin implementar las reglas me da esto
+
+![alt text](image-6.png)
+
+Por lo que no sirve con % ni potencias , vamos a arreglarlo
+
+![alt text](image-7.png)
+
+---
+
+Aqui agregamos las reglas de "Power" y "Modulus" en donde sirven para lo siguiente y tienen las siguientes restriccioens.
+
+**Power**
+- Restricciones de tipo: Ambos operandos deben ser de tipo numérico (IntType o FloatType).
+
+- Resultado: Devuelve FloatType si alguno de los operandos es FloatType; en caso contrario, devuelve IntType.
+
+
+**Modulus**
+- Representa la operación módulo, que calcula el resto de la división entre dos números enteros.
+
+- Restricciones de tipo:
+Ambos operandos deben ser de tipo entero (IntType).
+
+- Resultado:
+Siempre devuelve un valor de tipo IntType.
+
+## Agregar Validadores
+
+
