@@ -59,11 +59,12 @@ Sin implementar las reglas me da esto
 
 Por lo que no sirve con % ni potencias , vamos a arreglarlo
 
-![alt text](image-7.png)
+<img width="665" height="424" alt="image" src="https://github.com/user-attachments/assets/e13113a2-85a0-416e-9635-9b6c2fa03a63" />
+
 
 ---
 
-Aqui agregamos las reglas de "Power" y "Modulus" en donde sirven para lo siguiente y tienen las siguientes restriccioens.
+Aqui agregamos las reglas de "Power" y "Modulus" y los tokens que los identifican,  en donde sirven para lo siguiente y tienen las siguientes restriccioens.
 
 **Power**
 - Restricciones de tipo: Ambos operandos deben ser de tipo numérico (IntType o FloatType).
