@@ -1,3 +1,9 @@
 *.pyc
 *__pycache__
 *node_modules
+CompiScriptLexer.*
+CompiScriptListener.py
+CompiScriptParser.py
+CompiScriptVisitor.py
+CompiScript.interp
+CompiScript.tokens

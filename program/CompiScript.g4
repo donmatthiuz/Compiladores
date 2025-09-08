@@ -1,4 +1,4 @@
-grammar Compiscript;
+grammar CompiScript;
 
 // ------------------
 // Parser Rules
