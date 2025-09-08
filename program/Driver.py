@@ -1,14 +1,14 @@
 import sys
-from antlr4 import *
-from SimpleLangLexer import SimpleLangLexer
-from SimpleLangParser import SimpleLangParser
+from antlr4 import *    
+from CompiScriptLexer import CompiScriptLexer
+from CompiScriptParser import CompiScriptParser
 from type_check_visitor import TypeCheckVisitor
 
 def main(argv):
     input_stream = FileStream(argv[1])
-    lexer = SimpleLangLexer(input_stream)
+    lexer = CompiScriptLexer(input_stream)
     stream = CommonTokenStream(lexer)
-    parser = SimpleLangParser(stream)
+    parser = CompiScriptParser(stream)
     tree = parser.prog()
 
     visitor = TypeCheckVisitor()
