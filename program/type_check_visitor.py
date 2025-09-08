@@ -3,6 +3,10 @@ from CompiScriptVisitor import CompiScriptVisitor
 from custom_types import IntType, FloatType, StringType, BoolType, NullType, ArrayType, ClassType, FunctionType
 from SymbolTable import SymbolTable
 
+CF_RETURN = object()
+CF_BREAK = object()
+CF_CONTINUE = object()
+
 class Symbol:
     def __init__(self, name, type_):
         self.name = name
@@ -58,11 +62,18 @@ class TypeCheckVisitor(CompiScriptVisitor):
     def visitBlock(self, ctx: CompiScriptParser.BlockContext):
         self.enter_scope()
         try:
-            for st in ctx.statement():
-                self.visit(st)
+            stmts = list(ctx.statement())
+            for i, st in enumerate(stmts):
+                res = self.visit(st)
+                if res in (CF_RETURN, CF_BREAK, CF_CONTINUE):
+                    if i < len(stmts) - 1:
+                        kind = "return" if res is CF_RETURN else ("break" if res is CF_BREAK else "continue")
+                        raise SyntaxError(f"Código muerto: hay instrucciones después de '{kind}'")
+                    return res
         finally:
             self.exit_scope()
         return None
+
 
     def visitVariableDeclaration(self, ctx: CompiScriptParser.VariableDeclarationContext):
         """Maneja declaraciones de variables: let/var x = expr;"""
@@ -131,7 +142,7 @@ class TypeCheckVisitor(CompiScriptVisitor):
         base_type = self.visit(ctx.expression(0))
         if not isinstance(base_type, ClassType):
             raise TypeError(f"Asignación a propiedad sobre un no-objeto: {base_type}")
-        prop_name = ctx.Identifier(0).getText() if hasattr(ctx, "Identifier") and ctx.Identifier(0) else None
+        prop_name = ctx.Identifier().getText() if hasattr(ctx, "Identifier") and ctx.Identifier() else None
         if prop_name is None:
             raise NameError("Falta nombre de la propiedad en asignación a propiedad")
 
@@ -276,6 +287,8 @@ class TypeCheckVisitor(CompiScriptVisitor):
     # =====================================
     def visitLiteralExpr(self, ctx: CompiScriptParser.LiteralExprContext):
         """Maneja literales"""
+        if hasattr(ctx, "arrayLiteral") and ctx.arrayLiteral():
+            return self.visit(ctx.arrayLiteral())
         if ctx.Literal():
             lit = ctx.Literal().getText()
             if lit.startswith('"') and lit.endswith('"'):
@@ -301,16 +314,23 @@ class TypeCheckVisitor(CompiScriptVisitor):
         name = ctx.Identifier().getText()
         if name == "this":
             if not (self.current_class and (self.in_method or self.in_constructor)):
-                raise SyntaxError("`this` sólo puede usarse dentro de métodos o constructores de una clase")
+                raise SyntaxError("`this` solo puede usarse dentro de métodos o constructores de una clase")
             return ClassType(self.current_class.name)
 
         symbol = self.current_scope.lookup(name)
         if symbol is None:
             raise NameError(f"Variable '{name}' no definida")
         return symbol.type_
+    
+    def visitThisExpr(self, ctx: CompiScriptParser.ThisExprContext):
+        """Maneja this"""
+        if not (self.current_class and (self.in_method or self.in_constructor)):
+            raise SyntaxError("`this` sólo puede usarse dentro de métodos o constructores de una clase")
+        return ClassType(self.current_class.name)
+
 
     # =====================================
-    # HELPERS DE FIRMA Y TIPOS
+    # HELPERS
     # =====================================
     def _extract_function_signature(self, fctx):
         """paramTypes + returnType para function/constructor dentro de clase."""
@@ -338,7 +358,12 @@ class TypeCheckVisitor(CompiScriptVisitor):
             t = BoolType()
         else:
             t = ClassType(base)
+
+        dims = type_ctx.getText().count('[]')
+        for _ in range(dims):
+            t = ArrayType(t)
         return t
+
 
     # =====================================
     # CLASES Y OBJETOS
@@ -387,6 +412,7 @@ class TypeCheckVisitor(CompiScriptVisitor):
                     fctx = member.functionDeclaration()
                     fname = fctx.Identifier().getText()
 
+                    # Firma del miembro
                     param_types, ret_type = self._extract_function_signature(fctx)
                     ftype = FunctionType(param_types, ret_type)
 
@@ -396,21 +422,38 @@ class TypeCheckVisitor(CompiScriptVisitor):
                         info.ctor = ftype
 
                         self.in_constructor = True
+                        self.function_depth += 1
                         self.enter_scope()
                         try:
+                            # 'this' en el scope
                             self.current_scope.define("this", ClassType(class_name))
+
+                            # Duplicados en parámetros
+                            seen = set()
                             if fctx.parameters():
                                 for i, p in enumerate(fctx.parameters().parameter()):
                                     pname = p.Identifier().getText()
+                                    if pname in seen:
+                                        raise NameError(f"Parámetro duplicado '{pname}'")
+                                    seen.add(pname)
                                     self.current_scope.define(pname, param_types[i])
-                            self.visit(fctx.block())
+
+                            # retorno esperado en constructor: null/void
+                            self._function_return_stack.append(NullType())
+                            try:
+                                self.visit(fctx.block())
+                            finally:
+                                self._function_return_stack.pop()
                         finally:
                             self.exit_scope()
+                            self.function_depth -= 1
                             self.in_constructor = False
+
                     else:
                         if fname in info.methods:
                             raise NameError(f"Método '{fname}' ya declarado en clase '{class_name}'")
 
+                        # Override con superclase
                         super_m = self._resolve_method(class_name, fname) if info.base_name else None
                         if super_m:
                             if len(super_m.param_types) != len(param_types):
@@ -419,23 +462,37 @@ class TypeCheckVisitor(CompiScriptVisitor):
                                 if not self._are_types_compatible(sp, pp) or not self._are_types_compatible(pp, sp):
                                     raise TypeError(f"Firma incompatible al sobreescribir '{fname}' en '{class_name}'")
                             if not self._are_types_compatible(super_m.return_type, ret_type) or \
-                               not self._are_types_compatible(ret_type, super_m.return_type):
+                            not self._are_types_compatible(ret_type, super_m.return_type):
                                 raise TypeError(f"Tipo de retorno incompatible al sobreescribir '{fname}' en '{class_name}'")
 
                         info.methods[fname] = ftype
 
                         self.in_method = True
+                        self.function_depth += 1
                         self.enter_scope()
                         try:
                             self.current_scope.define("this", ClassType(class_name))
+
+                            # Duplicados en parámetros
+                            seen = set()
                             if fctx.parameters():
                                 for i, p in enumerate(fctx.parameters().parameter()):
                                     pname = p.Identifier().getText()
+                                    if pname in seen:
+                                        raise NameError(f"Parámetro duplicado '{pname}'")
+                                    seen.add(pname)
                                     self.current_scope.define(pname, param_types[i])
-                            self.visit(fctx.block())
+
+                            self._function_return_stack.append(ret_type)
+                            try:
+                                self.visit(fctx.block())
+                            finally:
+                                self._function_return_stack.pop()
                         finally:
                             self.exit_scope()
+                            self.function_depth -= 1
                             self.in_method = False
+
                 else:
                     pass
         finally:
@@ -528,12 +585,12 @@ class TypeCheckVisitor(CompiScriptVisitor):
     def visitBreakStatement(self, ctx: CompiScriptParser.BreakStatementContext):
         if self.loop_depth <= 0:
             raise SyntaxError("`break` solo puede usarse dentro de un bucle")
-        return None
+        return CF_BREAK
 
     def visitContinueStatement(self, ctx: CompiScriptParser.ContinueStatementContext):
         if self.loop_depth <= 0:
             raise SyntaxError("`continue` solo puede usarse dentro de un bucle")
-        return None
+        return CF_CONTINUE
 
     def visitSwitchStatement(self, ctx: CompiScriptParser.SwitchStatementContext):
         discr_type = self.visit(ctx.expression())
@@ -544,22 +601,41 @@ class TypeCheckVisitor(CompiScriptVisitor):
     # FUNCIONES
     # =====================================
     def visitFunctionDeclaration(self, ctx: CompiScriptParser.FunctionDeclarationContext):
+        # Firma y registro del símbolo de la función en el scope actual
+        fname = ctx.Identifier().getText()
+        param_types = []
+        if ctx.parameters():
+            for p in ctx.parameters().parameter():
+                if p.type_():
+                    param_types.append(self._parse_type_node(p.type_()))
+                else:
+                    raise TypeError(f"Parámetro '{p.Identifier().getText()}' debe tener tipo")
+        ret_type = self._parse_type_node(ctx.type_()) if ctx.type_() else NullType()
+
+        # Define el símbolo de la función
+        self.current_scope.define(fname, FunctionType(param_types, ret_type))
+
+        # Detecta parámetros duplicados
+        seen = set()
+        for p in ctx.parameters().parameter() if ctx.parameters() else []:
+            pname = p.Identifier().getText()
+            if pname in seen:
+                raise NameError(f"Parámetro duplicado '{pname}'")
+            seen.add(pname)
+
+        # Scope de la función
         self.function_depth += 1
         self.enter_scope()
         pushed = False
         try:
-            tctx = ctx.type_()
-            expected_ret = self._parse_type_node(tctx) if tctx else None
-            self._function_return_stack.append(expected_ret)
-            pushed = True
-
-            # Declarar parámetros en el scope
+            # declara parámetros en el scope
             if ctx.parameters():
-                for p in ctx.parameters().parameter():
+                for i, p in enumerate(ctx.parameters().parameter()):
                     pname = p.Identifier().getText()
-                    ptype = self._parse_type_node(p.type_()) if p.type_() else NullType()
-                    self.current_scope.define(pname, ptype)
+                    self.current_scope.define(pname, param_types[i])
 
+            self._function_return_stack.append(ret_type)
+            pushed = True
             self.visit(ctx.block())
         finally:
             if pushed:
@@ -568,10 +644,10 @@ class TypeCheckVisitor(CompiScriptVisitor):
             self.function_depth -= 1
         return None
 
+
     def visitReturnStatement(self, ctx: CompiScriptParser.ReturnStatementContext):
         if self.function_depth <= 0:
             raise SyntaxError("`return` debe estar dentro del cuerpo de una función")
-
         expected = self._function_return_stack[-1] if self._function_return_stack else None
         if ctx.expression():
             actual = self.visit(ctx.expression())
@@ -580,7 +656,7 @@ class TypeCheckVisitor(CompiScriptVisitor):
         else:
             if expected is not None and str(expected) != "null":
                 raise TypeError(f"Se esperaba retorno de tipo {expected}, pero se encontró `return;` vacío")
-        return None
+        return CF_RETURN
 
     # =====================================
     # SUFIJOS
@@ -606,7 +682,7 @@ class TypeCheckVisitor(CompiScriptVisitor):
 
             ftype = self._resolve_field(class_name, member_name)
             if ftype is None:
-                raise NameError(f"'{class_name}' no tiene miembro '{member_name}'")
+                raise NameError(f"'{class_name}' no tiene atributo '{member_name}'")
             return ftype
 
         # Llamada: (args)
@@ -626,10 +702,48 @@ class TypeCheckVisitor(CompiScriptVisitor):
 
         # Indexación: [expr]
         if first == '[':
-            self.visit(suffix_ctx.expression())  # valida índice
-            return base_type
+            # a[ idx ]
+            idx_t = self.visit(suffix_ctx.expression())
+            if not isinstance(idx_t, IntType):
+                raise TypeError("Índice de lista debe ser integer")
+
+            if not isinstance(base_type, ArrayType):
+                raise TypeError(f"Indexación sobre no-lista: {base_type}")
+
+            # Un solo nivel de índice devuelve el tipo del elemento
+            return base_type.element_type
+
 
         return base_type
+
+    # ====================================== 
+    # ARREGLOS
+    # ======================================
+    def visitArrayLiteral(self, ctx: CompiScriptParser.ArrayLiteralContext):
+        n = len(ctx.expression())
+        if n == 0:
+            from custom_types import NullType
+            return ArrayType(NullType())
+
+        # Tipo del primer elemento
+        elem_t = self.visit(ctx.expression(0))
+
+        for i in range(1, n):
+            t = self.visit(ctx.expression(i))
+            if not (self._are_types_compatible(elem_t, t) or self._are_types_compatible(t, elem_t)):
+                raise TypeError(f"Elementos de la lista deben ser del mismo tipo: {elem_t} y {t}")
+            if isinstance(elem_t, ClassType) and isinstance(t, ClassType) and elem_t.name != t.name:
+                if self._is_subclass(t.name, elem_t.name):
+                    # t <: elem_t  => nos quedamos con elem_t
+                    pass
+                elif self._is_subclass(elem_t.name, t.name):
+                    # elem_t <: t  => elevamos a t
+                    elem_t = t
+                else:
+                    raise TypeError(f"Elementos de la lista deben ser del mismo tipo: {elem_t} y {t}")
+
+        return ArrayType(elem_t)
+
 
     # =====================================
     # MÉTODOS AUXILIARES

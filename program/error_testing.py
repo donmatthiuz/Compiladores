@@ -75,7 +75,7 @@ return 1;
 """),
     },
     {
-        "name": "ctor_wrong_arity",
+        "name": "ctor_wrong_arg",
         "should_error": True,
         "expect_contains": "Constructor",
         "code": textwrap.dedent("""\
@@ -172,6 +172,121 @@ function f(): integer { return 1; }
     let z = e.m("a");  // tipo de argumento incompatible
 """),
     },
+    {
+        "name": "list_elem_type_mismatch",
+        "should_error": True,
+        "expect_contains": "Elementos de la lista",
+        "code": textwrap.dedent("""\
+        let a = [1, "x"];
+"""),
+    },
+    {
+        "name": "list_ok_homog",
+        "should_error": False,
+        "code": textwrap.dedent("""\
+        let a = [1, 2, 3];
+"""),
+    },
+    {
+        "name": "list_index_type_error",
+        "should_error": True,
+        "expect_contains": "Índice de lista",
+        "code": textwrap.dedent("""\
+        let a = [1,2,3];
+        let x = a["0"];
+"""),
+    },
+    {
+        "name": "list_index_on_nonlist",
+        "should_error": True,
+        "expect_contains": "Indexación sobre no-lista",
+        "code": textwrap.dedent("""\
+        let x: integer = 10;
+        let y = x[0];
+"""),
+    },
+    {
+        "name": "list_index_ok",
+        "should_error": False,
+        "code": textwrap.dedent("""\
+        let a = [1,2,3];
+        let x = a[0];
+"""),
+    },
+    {
+        "name": "dead_code_after_return",
+        "should_error": True,
+        "expect_contains": "Código muerto",
+        "code": textwrap.dedent("""\
+        function f(): integer {
+            return 1;
+            print(2);
+        }
+"""),
+    },
+    {
+        "name": "dead_code_after_break",
+        "should_error": True,
+        "expect_contains": "Código muerto",
+        "code": textwrap.dedent("""\
+        let i: integer = 0;
+        while (true) {
+            break;
+            i = 1;
+        }
+"""),
+    },
+    {
+        "name": "dead_code_after_continue",
+        "should_error": True,
+        "expect_contains": "Código muerto",
+        "code": textwrap.dedent("""\
+        let i: integer = 0;
+        while (true) {
+            continue;
+            i = 1;
+        }
+"""),
+    },
+    {
+        "name": "multiply_function_error",
+        "should_error": True,
+        "expect_contains": "no soportados",
+        "code": textwrap.dedent("""\
+        class C {
+          function foo(a: integer): integer { return a; }
+        }
+        let c: C = new C();
+        let x = c.foo * 2;
+"""),
+    },
+    {
+        "name": "duplicate_var_decl",
+        "should_error": True,
+        "expect_contains": "ya está declarada",
+        "code": textwrap.dedent("""\
+        let x: integer = 1;
+        let x: integer = 2;
+"""),
+    },
+    {
+        "name": "duplicate_param_decl_fn",
+        "should_error": True,
+        "expect_contains": "Parámetro duplicado",
+        "code": textwrap.dedent("""\
+        function f(a: integer, a: integer): integer { return 1; }
+"""),
+    },
+    {
+        "name": "duplicate_param_decl_method",
+        "should_error": True,
+        "expect_contains": "Parámetro duplicado",
+        "code": textwrap.dedent("""\
+        class D {
+            function m(a: integer, a: integer): integer { return 0; }
+        }
+"""),
+    },
 ]
 
 def run_test(test, tmpdir: pathlib.Path) -> dict:
@@ -184,7 +299,7 @@ def run_test(test, tmpdir: pathlib.Path) -> dict:
                               capture_output=True, text=True, cwd=HERE)
     except FileNotFoundError:
         return {"name": test["name"], "passed": False, "should_error": test["should_error"],
-                "output": "No se encontró Driver.py (coloca este archivo al lado de Driver.py)"}
+                "output": "No se encontró Driver.py"}
 
     out = (proc.stdout or "") + (proc.stderr or "")
     out = out.strip()
