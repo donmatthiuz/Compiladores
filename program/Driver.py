@@ -9,7 +9,7 @@ def main(argv):
     lexer = CompiScriptLexer(input_stream)
     stream = CommonTokenStream(lexer)
     parser = CompiScriptParser(stream)
-    tree = parser.prog()
+    tree = parser.program()
 
     visitor = TypeCheckVisitor()
     try:
