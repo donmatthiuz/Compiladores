@@ -12,6 +12,9 @@ class TypeCheckVisitor(CompiScriptVisitor):
     def __init__(self):
         self.symbol_table = SymbolTable()  # Tabla de símbolos global
         self.current_scope = self.symbol_table
+        self.loop_depth = 0                # anidamiento actual de bucles
+        self.function_depth = 0            # anidamiento actual de funciones
+        self._function_return_stack = []   # pila del tipo de retorno esperado
         
     def enter_scope(self):
         """Entra a un nuevo ámbito"""
@@ -395,3 +398,147 @@ class TypeCheckVisitor(CompiScriptVisitor):
         # Por ahora, simplemente retorna el tipo base
         # Esto se expandirá cuando implementemos llamadas a funciones, etc.
         return base_type
+    
+    # ===============================
+    # CONTROL DE FLUJO
+    # ===============================
+
+    # if (...) statement (else statement)?
+    def visitIfStatement(self, ctx):
+        cond_t = self.visit(ctx.expression())
+        self._require_boolean_condition(cond_t, "if")
+        self.visit(ctx.statement(0))
+        if len(ctx.statement()) > 1:
+            self.visit(ctx.statement(1))
+        return None
+
+    # while (...) statement
+    def visitWhileStatement(self, ctx):
+        cond_t = self.visit(ctx.expression())
+        self._require_boolean_condition(cond_t, "while")
+        self.loop_depth += 1
+        try:
+            self.visit(ctx.statement())
+        finally:
+            self.loop_depth -= 1
+        return None
+
+    # do statement while (...);
+    def visitDoWhileStatement(self, ctx):
+        self.loop_depth += 1
+        try:
+            self.visit(ctx.statement()) 
+        finally:
+            self.loop_depth -= 1
+        cond_t = self.visit(ctx.expression())
+        self._require_boolean_condition(cond_t, "do-while")
+        return None
+
+    # for (init? ; cond? ; update?) statement
+    def visitForStatement(self, ctx):
+        # init
+        if hasattr(ctx, "init") and ctx.init():
+            self.visit(ctx.init())
+        elif hasattr(ctx, "initializer") and ctx.initializer():
+            self.visit(ctx.initializer())
+
+        # cond
+        cond_t = None
+        if hasattr(ctx, "cond") and ctx.cond():
+            cond_t = self.visit(ctx.cond())
+        elif hasattr(ctx, "condition") and ctx.condition():
+            cond_t = self.visit(ctx.condition())
+        elif hasattr(ctx, "expression") and ctx.expression():
+            cond_t = self.visit(ctx.expression(0))
+
+        if cond_t is not None:
+            self._require_boolean_condition(cond_t, "for")
+
+        self.loop_depth += 1
+        try:
+            # evaluamos para type-checking
+            if hasattr(ctx, "update") and ctx.update():
+                self.visit(ctx.update())
+            elif hasattr(ctx, "expression") and len(ctx.expression()) > 1:
+                self.visit(ctx.expression(1))
+            # cuerpo
+            self.visit(ctx.statement())
+        finally:
+            self.loop_depth -= 1
+        return None
+
+    # foreach (x in coleccion) statement
+    def visitForeachStatement(self, ctx):
+        self.loop_depth += 1
+        try:
+            self.visit(ctx.expression())
+            self.visit(ctx.statement())
+        finally:
+            self.loop_depth -= 1
+        return None
+
+    # break;
+    def visitBreakStatement(self, ctx):
+        if self.loop_depth <= 0:
+            raise SyntaxError("`break` solo puede usarse dentro de un bucle")
+        return None
+
+    # continue;
+    def visitContinueStatement(self, ctx):
+        if self.loop_depth <= 0:
+            raise SyntaxError("`continue` solo puede usarse dentro de un bucle")
+        return None
+
+    def _require_boolean_condition(self, cond_type, where: str):
+        from custom_types import BoolType
+        if not isinstance(cond_type, BoolType):
+            raise TypeError(f"La condición en '{where}' debe ser de tipo boolean, no {cond_type}")
+        
+    # switch (...) { ... }
+    def visitSwitchStatement(self, ctx):
+        discr_type = self.visit(ctx.expression())
+        self._require_boolean_condition(discr_type, "switch")
+        for i in range(len(ctx.switchBlock().switchSection())):
+            self.visit(ctx.switchBlock().switchSection(i))
+        return None
+
+    # ===============================
+    # FUNCIONES Y RETURN
+    # ===============================
+
+    # function fname(params): Type { ... }
+    def visitFunctionDeclaration(self, ctx):
+        # Entra a un nuevo scope para la función
+        self.function_depth += 1
+        self.enter_scope()
+        try:
+            expected_ret = None
+            if hasattr(ctx, "typeAnnotation") and ctx.typeAnnotation():
+                expected_ret = self._parse_type_annotation(ctx.typeAnnotation())
+            self._function_return_stack.append(expected_ret)
+
+            if hasattr(ctx, "block") and ctx.block():
+                self.visit(ctx.block())
+            elif hasattr(ctx, "statement") and ctx.statement():
+                self.visit(ctx.statement())
+        finally:
+            self._function_return_stack.pop()
+            self.exit_scope()
+            self.function_depth -= 1
+        return None
+
+    # return; | return expr;
+    def visitReturnStatement(self, ctx):
+        if self.function_depth <= 0:
+            raise SyntaxError("`return` debe estar dentro del cuerpo de una función")
+
+        expected = self._function_return_stack[-1] if self._function_return_stack else None
+        if hasattr(ctx, "expression") and ctx.expression():
+            actual = self.visit(ctx.expression())
+            if expected is not None and not self._are_types_compatible(expected, actual):
+                raise TypeError(f"El tipo de retorno esperado es {expected}, pero se retornó {actual}")
+        else:
+            # return sin expresión
+            if expected is not None and str(expected) != "null":
+                raise TypeError(f"Se esperaba retorno de tipo {expected}, pero se encontró `return;` vacío")
+        return None
