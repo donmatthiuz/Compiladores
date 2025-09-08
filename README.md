@@ -158,6 +158,3 @@ print("Factorial de 5 = " + factorial(5));
 ```
 
 ---
-
-👉 Con este README, ya tienes **instrucciones claras para ejecutar el compilador, levantar el IDE y entender la estructura del proyecto**.
-
