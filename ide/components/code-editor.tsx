@@ -78,6 +78,8 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
         return "css"
       case "html":
         return "html"
+      case "cps":
+        return "compiScript"
       case "json":
         return "json"
       case "md":
@@ -117,6 +119,8 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
         '<span class="text-red-400">$1</span><span class="text-blue-400">$2</span><span class="text-red-400">$3</span>',
       )
     }
+    
+
 
     return highlighted
   }
@@ -186,7 +190,6 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
           <pre
             ref={highlightRef}
             className="absolute inset-0 p-4 font-mono text-sm leading-5 pointer-events-none overflow-auto whitespace-pre-wrap break-words"
-            style={{ color: "transparent" }}
             dangerouslySetInnerHTML={{
               __html: highlightSyntax(localContent, getLanguage(activeFile)),
             }}

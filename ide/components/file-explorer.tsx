@@ -14,6 +14,7 @@ import {
   Code,
   ImageIcon,
   Settings,
+
   Trash2,
   Edit3,
   FolderPlus,
@@ -89,6 +90,8 @@ export function FileExplorer({ onFileSelect, activeFile }: FileExplorerProps) {
         return <FileText className="h-4 w-4 text-orange-400" />
       case "json":
         return <Settings className="h-4 w-4 text-green-400" />
+      case "cps":
+        return <Code className="h-4 w-4 text-red-400" />
       case "md":
         return <FileText className="h-4 w-4 text-gray-400" />
       case "png":
