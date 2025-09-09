@@ -19,7 +19,7 @@ docker build --rm -t compiscript-image .
 ### 2. Levantar el contenedor
 
 ```bash
-sudo docker run -it --rm -v "$(pwd)/program":/program compiscript-image bash
+sudo docker run  -p 8765:8765 -it --rm -v "$(pwd)/program":/program compiscript-image bash
 ```
 
 Esto abrirá una shell dentro del contenedor con la carpeta `program/` montada.

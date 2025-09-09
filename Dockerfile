@@ -82,5 +82,7 @@ RUN pip install -r requirements.txt --break-system-packages
 
 USER root
 
+EXPOSE 8765
+
 
 WORKDIR /program
