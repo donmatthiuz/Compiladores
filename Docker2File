@@ -1,0 +1,60 @@
+FROM ubuntu:latest
+
+# -----------------------------
+# Instalar paquetes del sistema
+# -----------------------------
+RUN apt-get update && apt-get install -y \
+    curl \
+    bash-completion \
+    openjdk-17-jdk \
+    fontconfig \
+    fonts-dejavu-core \
+    software-properties-common \
+    dos2unix \
+    python3-pip \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN add-apt-repository ppa:deadsnakes/ppa && apt-get update
+
+# -----------------------------
+# Instalar ANTLR
+# -----------------------------
+COPY antlr-4.13.1-complete.jar /usr/local/lib/antlr-4.13.1-complete.jar
+
+COPY ./commands/antlr /usr/local/bin/antlr
+COPY ./commands/grun /usr/local/bin/grun
+RUN chmod +x /usr/local/bin/antlr /usr/local/bin/grun
+
+# -----------------------------
+# Crear entorno Python
+# -----------------------------
+COPY python-venv.sh .
+RUN dos2unix python-venv.sh
+RUN chmod +x python-venv.sh
+RUN ./python-venv.sh
+
+# -----------------------------
+# Directorio de trabajo
+# -----------------------------
+WORKDIR /program
+
+# -----------------------------
+# Copiar archivos de la app
+# -----------------------------
+COPY program/ .
+COPY requirements.txt .
+
+# -----------------------------
+# Instalar dependencias Python
+# -----------------------------
+RUN pip install -r requirements.txt --break-system-packages
+
+# -----------------------------
+# Exponer puerto
+# -----------------------------
+EXPOSE 8765
+
+# -----------------------------
+# Comando por defecto
+# -----------------------------
+CMD ["python3", "-u", "server.py"]
