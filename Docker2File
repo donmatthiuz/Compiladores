@@ -44,15 +44,18 @@ WORKDIR /program
 COPY program/ .
 COPY requirements.txt .
 
-# -----------------------------
-# Generar parser con ANTLR
-# -----------------------------
-RUN antlr -Dlanguage=Python3 -visitor CompiScript.g4
 
 # -----------------------------
 # Instalar dependencias Python
 # -----------------------------
 RUN pip install -r requirements.txt --break-system-packages
+
+
+# -----------------------------
+# Generar parser con ANTLR
+# -----------------------------
+RUN antlr -Dlanguage=Python3 -visitor CompiScript.g4
+
 
 # -----------------------------
 # Exponer puerto
