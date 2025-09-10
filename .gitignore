@@ -7,3 +7,4 @@ CompiScriptParser.py
 CompiScriptVisitor.py
 CompiScript.interp
 CompiScript.tokens
+*.tmp_tests

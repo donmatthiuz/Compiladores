@@ -596,6 +596,35 @@ class TypeCheckVisitor(CompiScriptVisitor):
         discr_type = self.visit(ctx.expression())
         self._require_boolean_condition(discr_type, "switch")
         return None
+    
+
+
+    # =====================
+    # TRY / CATCH
+    # =====================
+    def _visit_try_catch_core(self, ctx):
+        # try { ... }
+        self.visit(ctx.block(0))
+
+        # catch (err) { ... }
+        self.enter_scope()
+        try:
+            catch_name = ctx.Identifier().getText() if hasattr(ctx, "Identifier") and ctx.Identifier() else "_err"
+            if catch_name in self.current_scope.symbols:
+                raise NameError(f"Variable '{catch_name}' ya está declarada en este ámbito")
+
+            self.current_scope.define(catch_name, NullType())
+
+            self.visit(ctx.block(1))
+        finally:
+            self.exit_scope()
+        return None
+
+    def visitTryCatchStatement(self, ctx):
+        return self._visit_try_catch_core(ctx)
+
+    def visitTryStatement(self, ctx):
+        return self._visit_try_catch_core(ctx)
 
     # =====================================
     # FUNCIONES

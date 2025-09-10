@@ -287,6 +287,29 @@ function f(): integer { return 1; }
         }
 """),
     },
+        {
+        "name": "try_catch_ok",
+        "should_error": False,
+        "code": textwrap.dedent("""\
+    let lista: integer[] = [1,2,3];
+    try {
+      let x = lista[100];
+    } catch (err) {
+      let msg: string = "Error atrapado: " + err;
+    }
+"""),
+    },
+    {
+        "name": "try_catch_scope_leak",
+        "should_error": True,
+        "expect_contains": "no definida",
+        "code": textwrap.dedent("""\
+    try { let a = 1; } catch (e) { let b = 2; }
+    // 'e' no debe existir fuera del catch
+    let z = e;
+"""),
+    },
+
 ]
 
 def run_test(test, tmpdir: pathlib.Path) -> dict:
