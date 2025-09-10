@@ -309,6 +309,88 @@ function f(): integer { return 1; }
     let z = e;
 """),
     },
+    {
+        "name": "inherit_override_ok",
+        "should_error": False,
+        "code": textwrap.dedent("""\
+    class Animal {
+      function hablar(): string { return "ruido"; }
+    }
+    class Perro : Animal {
+      function hablar(): string { return "guau"; }
+    }
+    let p: Perro = new Perro();
+    let s: string = p.hablar();
+"""),
+    },
+    {
+        "name": "inherit_override_bad_params",
+        "should_error": True,
+        "expect_contains": "Firma incompatible",
+        "code": textwrap.dedent("""\
+    class A {
+      function m(x: integer): integer { return x; }
+    }
+    class B : A {
+      function m(): integer { return 1; }   // distinta aridad
+    }
+"""),
+    },
+    {
+        "name": "inherit_override_bad_return",
+        "should_error": True,
+        "expect_contains": "retorno incompatible",
+        "code": textwrap.dedent("""\
+    class A {
+      function m(): integer { return 1; }
+    }
+    class B : A {
+      function m(): string { return "x"; }  // distinto tipo de retorno
+    }
+"""),
+    },
+    {
+        "name": "inherit_field_access_ok",
+        "should_error": False,
+        "code": textwrap.dedent("""\
+    class A { let n: integer; }
+    class B : A { }
+    let b: B = new B();
+    let z: integer = b.n;   // campo heredado
+"""),
+    },
+    {
+        "name": "inherit_ctor_from_base_ok",
+        "should_error": False,
+        "code": textwrap.dedent("""\
+    class A {
+      function constructor(x: integer) { }
+    }
+    class B : A { }
+    let b: B = new B(10);
+"""),
+    },
+    {
+        "name": "inherit_ctor_from_base_arity_error",
+        "should_error": True,
+        "expect_contains": "Constructor",
+        "code": textwrap.dedent("""\
+    class A {
+      function constructor(x: integer, y: integer) { }
+    }
+    class B : A { }
+    let b: B = new B(1);   // aridad incorrecta respecto al ctor heredado
+"""),
+    },
+    {
+        "name": "subtype_assignment_ok",
+        "should_error": False,
+        "code": textwrap.dedent("""\
+    class Animal { }
+    class Perro : Animal { }
+    let a: Animal = new Perro();   // Perro <: Animal
+"""),
+    },
 
 ]
 

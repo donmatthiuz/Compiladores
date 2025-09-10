@@ -302,12 +302,14 @@ class TypeCheckVisitor(CompiScriptVisitor):
         return None
 
     def visitLeftHandSide(self, ctx: CompiScriptParser.LeftHandSideContext):
-        """Maneja lado izquierdo de asignaciones"""
         base_type = self.visit(ctx.primaryAtom())
         cur = base_type
-        for s in ctx.suffixOp():
-            cur = self._process_suffix_operation(cur, s)
+        suffixes = list(ctx.suffixOp())
+        for i, s in enumerate(suffixes):
+            next_s = suffixes[i+1] if i+1 < len(suffixes) else None
+            cur = self._process_suffix_operation(cur, s, next_s)
         return cur
+
 
     def visitIdentifierExpr(self, ctx: CompiScriptParser.IdentifierExprContext):
         """Maneja identificadores"""
@@ -505,24 +507,29 @@ class TypeCheckVisitor(CompiScriptVisitor):
         if class_name not in self.classes:
             raise NameError(f"Clase '{class_name}' no está declarada")
 
-        info = self.classes[class_name]
         arg_types = []
         if ctx.arguments():
             exprs = [ctx.arguments().expression(i) for i in range(len(ctx.arguments().expression()))]
             arg_types = [self.visit(e) for e in exprs]
 
-        if info.ctor is None:
+        ctor = self._resolve_ctor(class_name)
+
+        if ctor is None:
             if len(arg_types) != 0:
                 raise TypeError(f"La clase '{class_name}' no define constructor; se esperaban 0 argumentos")
             return ClassType(class_name)
 
-        if len(info.ctor.param_types) != len(arg_types):
-            raise TypeError(f"Constructor de '{class_name}' espera {len(info.ctor.param_types)} argumento(s), "
-                            f"pero se pasaron {len(arg_types)}")
-        for exp_t, got_t in zip(info.ctor.param_types, arg_types):
+        if len(ctor.param_types) != len(arg_types):
+            raise TypeError(
+                f"Constructor de '{class_name}' espera {len(ctor.param_types)} argumento(s), "
+                f"pero se pasaron {len(arg_types)}"
+            )
+        for exp_t, got_t in zip(ctor.param_types, arg_types):
             if not self._are_types_compatible(exp_t, got_t):
                 raise TypeError(f"Argumento de constructor incompatible: se esperaba {exp_t}, recibido {got_t}")
+
         return ClassType(class_name)
+
 
     # =====================================
     # CONTROL DE FLUJO
@@ -690,9 +697,9 @@ class TypeCheckVisitor(CompiScriptVisitor):
     # =====================================
     # SUFIJOS
     # =====================================
-    def _process_suffix_operation(self, base_type, suffix_ctx):
+    def _process_suffix_operation(self, base_type, suffix_ctx, next_suffix_ctx=None):
         """
-          - '.' Identifier           (Property)
+          - '.' Identifier           (Property o acceso a método)
           - '(' arguments? ')'       (Call)
           - '[' expression ']'       (Index)
         """
@@ -711,6 +718,13 @@ class TypeCheckVisitor(CompiScriptVisitor):
 
             ftype = self._resolve_field(class_name, member_name)
             if ftype is None:
+                is_next_call = (
+                    next_suffix_ctx is not None and
+                    next_suffix_ctx.getChildCount() > 0 and
+                    next_suffix_ctx.getChild(0).getText() == '('
+                )
+                if is_next_call:
+                    raise NameError(f"'{class_name}' no tiene miembro '{member_name}'")
                 raise NameError(f"'{class_name}' no tiene atributo '{member_name}'")
             return ftype
 
@@ -731,19 +745,15 @@ class TypeCheckVisitor(CompiScriptVisitor):
 
         # Indexación: [expr]
         if first == '[':
-            # a[ idx ]
             idx_t = self.visit(suffix_ctx.expression())
             if not isinstance(idx_t, IntType):
                 raise TypeError("Índice de lista debe ser integer")
-
             if not isinstance(base_type, ArrayType):
                 raise TypeError(f"Indexación sobre no-lista: {base_type}")
-
-            # Un solo nivel de índice devuelve el tipo del elemento
             return base_type.element_type
 
-
         return base_type
+
 
     # ====================================== 
     # ARREGLOS
@@ -818,6 +828,16 @@ class TypeCheckVisitor(CompiScriptVisitor):
                 return info.methods[method_name]
             info = self.classes.get(info.base_name) if info.base_name else None
         return None
+
+    def _resolve_ctor(self, class_name):
+        """Devuelve el primer constructor accesible en la jerarquía"""
+        info = self.classes.get(class_name)
+        while info:
+            if info.ctor is not None:
+                return info.ctor
+            info = self.classes.get(info.base_name) if info.base_name else None
+        return None
+
 
     # =====================================
     # OPERACIONES ARITMÉTICAS
