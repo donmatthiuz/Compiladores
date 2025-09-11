@@ -19,6 +19,418 @@ DRIVER = HERE / "Driver.py"
 #   should_error: bool (True si esperamos error de tipado)
 #   expect_contains: substring esperada en la salida cuando should_error=True
 TESTS = [
+    # =========================
+    # Sistema de Tipos — Aritmética
+    # =========================
+    {
+        "name": "arith_add_ok_int_float",
+        "should_error": False,
+        "code": textwrap.dedent("""\
+    let a: integer = 1;
+    let b: integer = 2;
+    let c = a + b;
+"""),
+    },
+    {
+        "name": "arith_mul_type_error_str_int",
+        "should_error": True,
+        "expect_contains": "no soportados",
+        "code": textwrap.dedent("""\
+    let s: string = "x";
+    let a = s * 2;
+"""),
+    },
+    {
+        "name": "arith_div_type_error_bool_float",
+        "should_error": True,
+        "expect_contains": "no soportados",
+        "code": textwrap.dedent("""\
+    let t: boolean = true;
+    let a = t / 3;
+"""),
+    },
+    {
+        "name": "arith_mod_requires_integers",
+        "should_error": True,
+        "expect_contains": "solo soporta enteros",
+        "code": textwrap.dedent("""\
+    let x: integer = 5;
+    let y: integer = 2;
+    let f: string = "a";
+    let z = x % 2;     // ok
+    let w = f % x;     // error
+"""),
+    },
+
+    # =========================
+    # Sistema de Tipos — Lógicas
+    # =========================
+    {
+        "name": "logic_and_type_error",
+        "should_error": True,
+        "expect_contains": "requiere booleanos",
+        "code": textwrap.dedent("""\
+    let a: integer = 1;
+    let b: boolean = false;
+    let c = a && b;
+"""),
+    },
+    {
+        "name": "logic_or_type_error",
+        "should_error": True,
+        "expect_contains": "requiere booleanos",
+        "code": textwrap.dedent("""\
+    let a: integer = 0;
+    let c = a || true;
+"""),
+    },
+    {
+        "name": "logic_not_type_error",
+        "should_error": True,
+        "expect_contains": "no soportado",
+        "code": textwrap.dedent("""\
+    let a: integer = 1;
+    let b = !a;
+"""),
+    },
+
+    # =========================
+    # Sistema de Tipos — Comparaciones
+    # =========================
+    {
+        "name": "relational_requires_numeric",
+        "should_error": True,
+        "expect_contains": "requieren operandos numéricos",
+        "code": textwrap.dedent("""\
+    let s: string = "hi";
+    let ok = 1 < 2;
+    let bad = s >= 1;  // error
+"""),
+    },
+    {
+        "name": "equality_incompatible_types_should_error",
+        "should_error": True,
+        "expect_contains": "compat",
+        "code": textwrap.dedent("""\
+    let b: boolean = (1 == true);  // debería ser error por incompatibilidad
+"""),
+    },
+
+    # =========================
+    # Sistema de Tipos — Asignaciones
+    # =========================
+    {
+        "name": "assign_type_mismatch",
+        "should_error": True,
+        "expect_contains": "No se puede asignar",
+        "code": textwrap.dedent("""\
+    let x: integer = 0;
+    x = "hola";  // error
+"""),
+    },
+
+    # =========================
+    # Listas y estructuras
+    # =========================
+    {
+        "name": "list_nested_ok",
+        "should_error": False,
+        "code": textwrap.dedent("""\
+    let m: integer[][] = [[1,2],[3,4]];
+    let x: integer = m[0][1];
+"""),
+    },
+    {
+        "name": "list_nested_type_mismatch",
+        "should_error": True,
+        "expect_contains": "Elementos de la lista",
+        "code": textwrap.dedent("""\
+    let m = [[1,2], ["a"]];  // error, tipos heterogéneos en 2D
+"""),
+    },
+    {
+        "name": "list_class_subtyping_ok",
+        "should_error": False,
+        "code": textwrap.dedent("""\
+    class Animal { }
+    class Perro : Animal { }
+    let l = [ new Perro(), new Animal() ];
+"""),
+    },
+    {
+        "name": "list_index_type_error_2",
+        "should_error": True,
+        "expect_contains": "Índice de lista debe ser integer",
+        "code": textwrap.dedent("""\
+    let xs: integer[] = [1,2,3];
+    let y = xs["0"];
+"""),
+    },
+
+    # =========================
+    # Manejo de Ámbito
+    # =========================
+    {
+        "name": "undeclared_variable_use",
+        "should_error": True,
+        "expect_contains": "no definida",
+        "code": textwrap.dedent("""\
+    y = 10;   // sin declaración previa
+"""),
+    },
+    {
+        "name": "redeclaration_same_scope_var",
+        "should_error": True,
+        "expect_contains": "ya está declarada",
+        "code": textwrap.dedent("""\
+    let a: integer = 1;
+    let a: integer = 2;  // redeclaración misma scope
+"""),
+    },
+    {
+        "name": "shadowing_in_inner_block_ok",
+        "should_error": False,
+        "code": textwrap.dedent("""\
+    let a: integer = 1;
+    {
+      let a: integer = 2;   // sombreado en bloque interno
+      let b: integer = a;   // usa el interno
+    }
+    let c: integer = a;     // usa el externo
+"""),
+    },
+    {
+        "name": "use_out_of_block_scope_error",
+        "should_error": True,
+        "expect_contains": "no definida",
+        "code": textwrap.dedent("""\
+    {
+      let a: integer = 2;
+    }
+    a = 3;  // fuera del bloque
+"""),
+    },
+    {
+        "name": "function_block_scope_isolated",
+        "should_error": True,
+        "expect_contains": "no definida",
+        "code": textwrap.dedent("""\
+    function f(): integer { let z: integer = 1; return z; }
+    f();
+    let q = z;   // z no existe aquí
+"""),
+    },
+
+    # =========================
+    # Funciones y Procedimientos
+    # =========================
+    {
+        "name": "fn_call_wrong_arity",
+        "should_error": True,
+        "expect_contains": "Se esperaban",
+        "code": textwrap.dedent("""\
+    function f(x: integer, y: integer): integer { return x + y; }
+    let r = f(1);  // falta un argumento
+"""),
+    },
+    {
+        "name": "fn_call_arg_type_mismatch",
+        "should_error": True,
+        "expect_contains": "Argumento incompatible",
+        "code": textwrap.dedent("""\
+    function inc(x: integer): integer { return x + 1; }
+    let r = inc("a");  // tipo incorrecto
+"""),
+    },
+    {
+        "name": "fn_return_type_mismatch",
+        "should_error": True,
+        "expect_contains": "El tipo de retorno esperado",
+        "code": textwrap.dedent("""\
+    function s(): integer { return "hola"; }  // retorna string
+"""),
+    },
+    {
+        "name": "fn_recursion_ok",
+        "should_error": False,
+        "code": textwrap.dedent("""\
+    function fact(n: integer): integer {
+      if (n <= 1) return 1;
+      return n * fact(n - 1);
+    }
+    let f = fact(4);
+"""),
+    },
+    {
+        "name": "fn_nested_closure_ok",
+        "should_error": False,
+        "code": textwrap.dedent("""\
+    function outer(): integer {
+      let a: integer = 1;
+      function inner(): integer { return a; }
+      return inner();
+    }
+    let x = outer();
+"""),
+    },
+    {
+        "name": "fn_nested_closure_bad_return",
+        "should_error": True,
+        "expect_contains": "tipo de retorno esperado",
+        "code": textwrap.dedent("""\
+    function outer(): integer {
+      let a: string = "x";
+      function inner(): integer { return a; }  // retorna string
+      return inner();
+    }
+"""),
+    },
+    {
+        "name": "duplicate_function_decl_same_scope",
+        "should_error": True,
+        "expect_contains": "ya definido",
+        "code": textwrap.dedent("""\
+    function h(): integer { return 1; }
+    function h(): integer { return 2; }  // no hay sobrecarga
+"""),
+    },
+    {
+        "name": "call_undefined_function",
+        "should_error": True,
+        "expect_contains": "no definida",
+        "code": textwrap.dedent("""\
+    let r = foo();  // foo no existe
+"""),
+    },
+
+    # =========================
+    # Control de Flujo
+    # =========================
+    {
+        "name": "if_cond_must_be_bool",
+        "should_error": True,
+        "expect_contains": "if",
+        "code": textwrap.dedent("""\
+    if (1) { }
+"""),
+    },
+    {
+        "name": "while_cond_must_be_bool",
+        "should_error": True,
+        "expect_contains": "while",
+        "code": textwrap.dedent("""\
+    while (0) { }
+"""),
+    },
+    {
+        "name": "do_while_cond_must_be_bool",
+        "should_error": True,
+        "expect_contains": "do-while",
+        "code": textwrap.dedent("""\
+    do { } while ("x");
+"""),
+    },
+    {
+        "name": "switch_cond_must_be_bool",
+        "should_error": True,
+        "expect_contains": "switch",
+        "code": textwrap.dedent("""\
+    switch (1) {
+      case 1: { }
+      default: { }
+    }
+"""),
+    },
+
+    # =========================
+    # Clases y Objetos
+    # =========================
+    {
+        "name": "class_duplicate_name",
+        "should_error": True,
+        "expect_contains": "Clase",
+        "code": textwrap.dedent("""\
+    class A { }
+    class A { }  // duplicada
+"""),
+    },
+    {
+        "name": "class_duplicate_field",
+        "should_error": True,
+        "expect_contains": "Atributo",
+        "code": textwrap.dedent("""\
+    class C { let x: integer; let x: integer; }
+"""),
+    },
+    {
+        "name": "class_duplicate_method",
+        "should_error": True,
+        "expect_contains": "Método",
+        "code": textwrap.dedent("""\
+    class M { function m(): integer { return 1; } function m(): integer { return 2; } }
+"""),
+    },
+    {
+        "name": "method_call_wrong_arity",
+        "should_error": True,
+        "expect_contains": "Se esperaban",
+        "code": textwrap.dedent("""\
+    class A { function m(x: integer) { } }
+    let a: A = new A();
+    a.m();  // falta argumento
+"""),
+    },
+    {
+        "name": "this_outside_method_again",
+        "should_error": True,
+        "expect_contains": "this",
+        "code": textwrap.dedent("""\
+    this.x = 1;
+"""),
+    },
+
+    # =========================
+    # Generales
+    # =========================
+    {
+        "name": "dead_code_after_return_in_fn",
+        "should_error": True,
+        "expect_contains": "Código muerto",
+        "code": textwrap.dedent("""\
+    function f(): integer {
+      return 1;
+      let z: integer = 2;  // muerto
+    }
+"""),
+    },
+    {
+        "name": "multiply_function_error",
+        "should_error": True,
+        "expect_contains": "no soportados",
+        "code": textwrap.dedent("""\
+    function f(): integer { return 1; }
+    let x = f * 2;   // no se puede multiplicar funciones
+"""),
+    },
+    {
+        "name": "duplicate_var_decl_again",
+        "should_error": True,
+        "expect_contains": "ya está declarada",
+        "code": textwrap.dedent("""\
+    let x: integer = 1;
+    let x: integer = 2;
+"""),
+    },
+    {
+        "name": "duplicate_param_decl_method_again",
+        "should_error": True,
+        "expect_contains": "Parámetro duplicado",
+        "code": textwrap.dedent("""\
+    class A {
+      function m(a: integer, a: integer) { }
+    }
+"""),
+    },
     {
         "name": "non_boolean_if",
         "should_error": True,
