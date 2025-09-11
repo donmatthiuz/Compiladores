@@ -14,9 +14,8 @@ def main(argv):
     visitor = TypeCheckVisitor()
     try:
         visitor.visit(tree)
-        print("Type checking passed")
     except (TypeError, NameError, SyntaxError) as e:
-        print(f"Type checking error: {e}")
+        print(f"{e}")
 
 if __name__ == '__main__':
     main(sys.argv)
