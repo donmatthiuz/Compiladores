@@ -68,7 +68,9 @@ class TypeCheckVisitor(CompiScriptVisitor):
                 if res in (CF_RETURN, CF_BREAK, CF_CONTINUE):
                     if i < len(stmts) - 1:
                         kind = "return" if res is CF_RETURN else ("break" if res is CF_BREAK else "continue")
-                        raise SyntaxError(f"Código muerto: hay instrucciones después de '{kind}'")
+                        line = ctx.start.line       # número de línea
+                        column = ctx.start.column 
+                        raise SyntaxError(f"line {line}:{column}  Código muerto: hay instrucciones después de '{kind}'")
                     return res
         finally:
             self.exit_scope()
@@ -82,7 +84,9 @@ class TypeCheckVisitor(CompiScriptVisitor):
         # Verificar si ya existe en el scope actual
         # Usar directamente el diccionario symbols en lugar de lookup_current_scope
         if var_name in self.current_scope.symbols:
-            raise NameError(f"Variable '{var_name}' ya está declarada en este ámbito")
+            line = ctx.start.line       # número de línea
+            column = ctx.start.column 
+            raise NameError(f"line {line}:{column}  Variable '{var_name}' ya está declarada en este ámbito")
 
         if ctx.initializer():
             var_type = self.visit(ctx.initializer())
@@ -101,7 +105,9 @@ class TypeCheckVisitor(CompiScriptVisitor):
         
         # Verificar si ya existe
         if const_name in self.current_scope.symbols:
-            raise NameError(f"Constante '{const_name}' ya está declarada en este ámbito")
+            line = ctx.start.line
+            column = ctx.start.column 
+            raise NameError(f"line {line}:{column} Constante '{const_name}' ya está declarada en este ámbito")
 
         const_type = self.visit(ctx.expression())
         
@@ -132,29 +138,39 @@ class TypeCheckVisitor(CompiScriptVisitor):
             var_name = ctx.Identifier().getText()
             symbol = self.current_scope.lookup(var_name)
             if symbol is None:
-                raise NameError(f"Variable '{var_name}' no definida")
+                line = ctx.start.line
+                column = ctx.start.column
+                raise NameError(f"line {line}:{column} Variable '{var_name}' no definida")
             value_type = self.visit(ctx.expression(0))
             if not self._are_types_compatible(symbol.type_, value_type):
-                raise TypeError(f"No se puede asignar {value_type} a variable de tipo {symbol.type_}")
+                line = ctx.start.line
+                column = ctx.start.column
+                raise TypeError(f"line {line}:{column} No se puede asignar {value_type} a variable de tipo {symbol.type_}")
             return value_type
 
         # expression(0) '.' Identifier '=' expression(1)
         base_type = self.visit(ctx.expression(0))
         if not isinstance(base_type, ClassType):
-            raise TypeError(f"Asignación a propiedad sobre un no-objeto: {base_type}")
+            line = ctx.start.line
+            column = ctx.start.column 
+            raise TypeError(f"line {line}:{column} Asignación a propiedad sobre un no-objeto: {base_type}")
         prop_name = ctx.Identifier().getText() if hasattr(ctx, "Identifier") and ctx.Identifier() else None
         if prop_name is None:
-            raise NameError("Falta nombre de la propiedad en asignación a propiedad")
+            line = ctx.start.line
+            column = ctx.start.column 
+            raise NameError(f"line {line}:{column} Falta nombre de la propiedad en asignación a propiedad")
 
         ftype = self._resolve_field(base_type.name, prop_name)
+        line = ctx.start.line
+        column = ctx.start.column 
         if ftype is None:
             if self._resolve_method(base_type.name, prop_name):
-                raise TypeError(f"'{prop_name}' es un método de '{base_type.name}', no un atributo asignable")
-            raise NameError(f"'{base_type.name}' no tiene atributo '{prop_name}'")
+                raise TypeError(f"line {line}:{column} '{prop_name}' es un método de '{base_type.name}', no un atributo asignable")
+            raise NameError(f"line {line}:{column} '{base_type.name}' no tiene atributo '{prop_name}'")
 
         value_type = self.visit(ctx.expression(1))
         if not self._are_types_compatible(ftype, value_type):
-            raise TypeError(f"No se puede asignar {value_type} al atributo '{prop_name}' de tipo {ftype}")
+            raise TypeError(f"line {line}:{column} No se puede asignar {value_type} al atributo '{prop_name}' de tipo {ftype}")
         return ftype
 
     # =====================================
@@ -179,7 +195,9 @@ class TypeCheckVisitor(CompiScriptVisitor):
         f_type = self.visit(ctx.expression(1))
         if self._are_types_compatible(t_type, f_type):
             return t_type
-        raise TypeError(f"Tipos incompatibles en operador ternario: {t_type} y {f_type}")
+        line = ctx.start.line
+        column = ctx.start.column 
+        raise TypeError(f"line {line}:{column} Tipos incompatibles en operador ternario: {t_type} y {f_type}")
 
     def visitLogicalOrExpr(self, ctx: CompiScriptParser.LogicalOrExprContext):
         """Maneja OR lógico: ||"""
@@ -189,7 +207,9 @@ class TypeCheckVisitor(CompiScriptVisitor):
         for i in range(1, len(ctx.logicalAndExpr())):
             r = self.visit(ctx.logicalAndExpr(i))
             if not isinstance(l, BoolType) or not isinstance(r, BoolType):
-                raise TypeError("Operador '||' requiere booleanos")
+                line = ctx.start.line
+                column = ctx.start.column
+                raise TypeError(f"line {line}:{column} Operador '||' requiere booleanos")
             l = BoolType()
         return l
 
@@ -201,7 +221,9 @@ class TypeCheckVisitor(CompiScriptVisitor):
         for i in range(1, len(ctx.equalityExpr())):
             r = self.visit(ctx.equalityExpr(i))
             if not isinstance(l, BoolType) or not isinstance(r, BoolType):
-                raise TypeError("Operador '&&' requiere booleanos")
+                line = ctx.start.line
+                column = ctx.start.column 
+                raise TypeError(f"line {line}:{column} Operador '&&' requiere booleanos")
             l = BoolType()
         return l
 
@@ -227,7 +249,9 @@ class TypeCheckVisitor(CompiScriptVisitor):
         for i in range(1, len(ctx.relationalExpr())):
             right_t = self.visit(ctx.relationalExpr(i))
             if not _comparable(left_t, right_t):
-                raise TypeError(f"Tipos incompatibles en comparación de igualdad: {left_t} y {right_t}")
+                line = ctx.start.line
+                column = ctx.start.column 
+                raise TypeError(f"line {line}:{column} Tipos incompatibles en comparación de igualdad: {left_t} y {right_t}")
             left_t = BoolType()
         return BoolType()
 
@@ -240,7 +264,9 @@ class TypeCheckVisitor(CompiScriptVisitor):
         for i in range(1, len(ctx.additiveExpr())):
             r = self.visit(ctx.additiveExpr(i))
             if not isinstance(l, (IntType, FloatType)) or not isinstance(r, (IntType, FloatType)):
-                raise TypeError("Operadores relacionales requieren operandos numéricos")
+                line = ctx.start.line
+                column = ctx.start.column 
+                raise TypeError(f"line {line}:{column} Operadores relacionales requieren operandos numéricos")
             l = BoolType()
         return l
 
@@ -284,11 +310,15 @@ class TypeCheckVisitor(CompiScriptVisitor):
         if op == '-':
             if isinstance(t, (IntType, FloatType)):
                 return t
-            raise TypeError(f"Operador unario '-' no soportado para tipo: {t}")
+            line = ctx.start.line
+            column = ctx.start.column 
+            raise TypeError(f"line {line}:{column} Operador unario '-' no soportado para tipo: {t}")
         else:
             if isinstance(t, BoolType):
                 return BoolType()
-            raise TypeError(f"Operador unario '!' no soportado para tipo: {t}")
+            line = ctx.start.line
+            column = ctx.start.column 
+            raise TypeError(f"line {line}:{column} Operador unario '!' no soportado para tipo: {t}")
 
     def visitPrimaryExpr(self, ctx: CompiScriptParser.PrimaryExprContext):
         """Maneja expresiones primarias"""
@@ -334,18 +364,24 @@ class TypeCheckVisitor(CompiScriptVisitor):
         name = ctx.Identifier().getText()
         if name == "this":
             if not (self.current_class and (self.in_method or self.in_constructor)):
-                raise SyntaxError("`this` solo puede usarse dentro de métodos o constructores de una clase")
+                line = ctx.start.line
+                column = ctx.start.column 
+                raise SyntaxError(f"line {line}:{column} `this` solo puede usarse dentro de métodos o constructores de una clase")
             return ClassType(self.current_class.name)
 
         symbol = self.current_scope.lookup(name)
         if symbol is None:
-            raise NameError(f"Variable '{name}' no definida")
+            line = ctx.start.line
+            column = ctx.start.column 
+            raise NameError(f"line {line}:{column} Variable '{name}' no definida")
         return symbol.type_
     
     def visitThisExpr(self, ctx: CompiScriptParser.ThisExprContext):
         """Maneja this"""
         if not (self.current_class and (self.in_method or self.in_constructor)):
-            raise SyntaxError("`this` sólo puede usarse dentro de métodos o constructores de una clase")
+            line = ctx.start.line
+            column = ctx.start.column 
+            raise SyntaxError(f"line {line}:{column} `this` sólo puede usarse dentro de métodos o constructores de una clase")
         return ClassType(self.current_class.name)
 
 
@@ -360,7 +396,9 @@ class TypeCheckVisitor(CompiScriptVisitor):
                 if p.type_():
                     ptype = self._parse_type_node(p.type_())
                 else:
-                    raise TypeError(f"Parámetro '{p.Identifier().getText()}' debe tener tipo")
+                    line = fctx.start.line
+                    column = fctx.start.column 
+                    raise TypeError(f"line {line}:{column} Parámetro '{p.Identifier().getText()}' debe tener tipo")
                 param_types.append(ptype)
         ret_type = self._parse_type_node(fctx.type_()) if fctx.type_() else NullType()
         return param_types, ret_type
@@ -393,9 +431,13 @@ class TypeCheckVisitor(CompiScriptVisitor):
         base_name = ctx.Identifier(1).getText() if len(ctx.Identifier()) > 1 else None
 
         if class_name in self.classes:
-            raise NameError(f"Clase '{class_name}' ya está declarada")
+            line = ctx.start.line
+            column = ctx.start.column 
+            raise NameError(f"line {line}:{column} Clase '{class_name}' ya está declarada")
         if base_name and base_name not in self.classes:
-            raise NameError(f"Superclase '{base_name}' no está declarada")
+            line = ctx.start.line
+            column = ctx.start.column
+            raise NameError(f"line {line}:{column} Superclase '{base_name}' no está declarada")
 
         info = ClassInfo(class_name, base_name)
         self.classes[class_name] = info
@@ -411,20 +453,29 @@ class TypeCheckVisitor(CompiScriptVisitor):
                     vctx = member.variableDeclaration()
                     field_name = vctx.Identifier().getText()
                     if field_name in info.fields:
-                        raise NameError(f"Atributo '{field_name}' ya declarado en clase '{class_name}'")
+                        line = vctx.start.line
+                        column = vctx.start.column 
+
+                        raise NameError(f"line {line}:{column} Atributo '{field_name}' ya declarado en clase '{class_name}'")
                     if vctx.typeAnnotation():
                         ftype = self._parse_type_from_annotation(vctx.typeAnnotation())
                     elif vctx.initializer():
                         ftype = self.visit(vctx.initializer())
                     else:
-                        raise TypeError(f"El atributo '{field_name}' en '{class_name}' debe tener tipo o valor inicial")
+                        line = vctx.start.line
+                        column = vctx.start.column 
+
+                        raise TypeError(f"line {line}:{column} El atributo '{field_name}' en '{class_name}' debe tener tipo o valor inicial")
                     info.fields[field_name] = ftype
 
                 elif hasattr(member, "constantDeclaration") and member.constantDeclaration():
                     cctx = member.constantDeclaration()
                     field_name = cctx.Identifier().getText()
                     if field_name in info.fields:
-                        raise NameError(f"Atributo '{field_name}' ya declarado en clase '{class_name}'")
+                        line = cctx.start.line
+                        column = cctx.start.column 
+
+                        raise NameError(f"line {line}:{column} Atributo '{field_name}' ya declarado en clase '{class_name}'")
                     ftype = self.visit(cctx.expression())
                     info.fields[field_name] = ftype
 
@@ -438,7 +489,10 @@ class TypeCheckVisitor(CompiScriptVisitor):
 
                     if fname == "constructor":
                         if info.ctor is not None:
-                            raise NameError(f"Constructor duplicado en clase '{class_name}'")
+                            line = fctx.start.line
+                            column = fctx.start.column 
+
+                            raise NameError(f"line {line}:{column} Constructor duplicado en clase '{class_name}'")
                         info.ctor = ftype
 
                         self.in_constructor = True
@@ -850,7 +904,9 @@ class TypeCheckVisitor(CompiScriptVisitor):
         for i in range(1, n):
             t = self.visit(ctx.expression(i))
             if not (self._are_types_compatible(elem_t, t) or self._are_types_compatible(t, elem_t)):
-                raise TypeError(f"Elementos de la lista deben ser del mismo tipo: {elem_t} y {t}")
+                line = ctx.start.line
+                column = ctx.start.column 
+                raise TypeError(f"line {line}:{column} Elementos de la lista deben ser del mismo tipo: {elem_t} y {t}")
             if isinstance(elem_t, ClassType) and isinstance(t, ClassType) and elem_t.name != t.name:
                 if self._is_subclass(t.name, elem_t.name):
                     # t <: elem_t  => nos quedamos con elem_t
@@ -859,7 +915,9 @@ class TypeCheckVisitor(CompiScriptVisitor):
                     # elem_t <: t  => elevamos a t
                     elem_t = t
                 else:
-                    raise TypeError(f"Elementos de la lista deben ser del mismo tipo: {elem_t} y {t}")
+                    line = ctx.start.line
+                    column = ctx.start.column 
+                    raise TypeError(f"line {line}:{column} Elementos de la lista deben ser del mismo tipo: {elem_t} y {t}")
 
         return ArrayType(elem_t)
 
