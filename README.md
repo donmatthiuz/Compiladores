@@ -196,11 +196,6 @@ function factorial(n: integer): integer {
 print("Factorial de 5 = " + factorial(5));
 ```
 
----
 
-✅ Con este `README.md` ya queda claro:
 
-* El **Dockerfile principal** debe contener el contenido de `Docker2File`.
-* Tienes un contenedor funcional para producción y otro opcional para pruebas manuales.
 
----
