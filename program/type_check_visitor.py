@@ -708,6 +708,40 @@ class TypeCheckVisitor(CompiScriptVisitor):
             self.function_depth -= 1
         return None
 
+    def visitCallExpr(self, ctx: CompiScriptParser.CallExprContext):
+        fname = ctx.parentCtx.primaryAtom().getText() if hasattr(ctx.parentCtx, "primaryAtom") else None
+
+        # Evalúa los argumentos
+        arg_types = []
+        if ctx.arguments():
+            for e in ctx.arguments().expression():
+                arg_types.append(self.visit(e))
+
+        # Verifica que la función exista en el scope
+        ftype = self.current_scope.resolve(fname)
+        if not isinstance(ftype, FunctionType):
+            token = ctx.start
+            raise TypeError(f"line {token.line}:{token.column}  error: '{fname}' no es una función")
+
+        # Verifica número de parámetros
+        if len(arg_types) != len(ftype.param_types):
+            token = ctx.start
+            raise TypeError(
+                f"line {token.line}:{token.column}  error: La función '{fname}' esperaba {len(ftype.param_types)} "
+                f"argumentos pero recibió {len(arg_types)}"
+            )
+
+        # Verifica tipos de parámetros
+        for i, (expected, actual) in enumerate(zip(ftype.param_types, arg_types)):
+            if not self._are_types_compatible(expected, actual):
+                token = ctx.arguments().expression(i).start
+                raise TypeError(
+                    f"line {token.line}:{token.column}  error: argumento {i+1} de '{fname}' "
+                    f"espera {expected}, recibió {actual}"
+                )
+
+        return ftype.ret_type
+
 
     def visitReturnStatement(self, ctx: CompiScriptParser.ReturnStatementContext):
         if self.function_depth <= 0:
