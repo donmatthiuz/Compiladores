@@ -599,10 +599,38 @@ class TypeCheckVisitor(CompiScriptVisitor):
             raise SyntaxError("`continue` solo puede usarse dentro de un bucle")
         return CF_CONTINUE
 
+    
+    
     def visitSwitchStatement(self, ctx: CompiScriptParser.SwitchStatementContext):
+
         discr_type = self.visit(ctx.expression())
-        self._require_boolean_condition(discr_type, "switch")
+
+        # Revisar cada case
+        for case_ctx in ctx.switchCase():
+            case_expr_type = self.visit(case_ctx.expression())
+
+            if not self._are_types_compatible(discr_type, case_expr_type):
+                token = case_ctx.expression().start
+                line, col = token.line, token.column
+                raise TypeError(
+                    f"line {line}:{col}  error: Los case deben ser del mismo tipo que el switch: "
+                    f"switch es {discr_type}, pero este case es {case_expr_type}"
+                )
+
+            # Chequear todas las sentencias dentro del case
+            for stmt in case_ctx.statement():
+                self.visit(stmt)
+
+        # Revisar default (si existe)
+        if ctx.defaultCase():
+            for stmt in ctx.defaultCase().statement():
+                self.visit(stmt)
+
         return None
+
+
+
+
     
 
 
