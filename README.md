@@ -6,40 +6,72 @@ Este proyecto implementa el lenguaje **CompiScript** usando **ANTLR4** y **Pytho
 
 ---
 
-## Integrantes
+## 👥 Integrantes
 
-- Marlon Hernández 15177
-- Mathew Cordero 22982
+* Marlon Hernández – 15177
+* Mathew Cordero – 22982
+
+---
 
 ## 🐳 Ejecución con Docker
 
-### 1. Construir la imagen de Docker
+El proyecto incluye **dos configuraciones Docker**:
+
+1. **Dockerfile de pruebas manuales** → sirve para entrar al contenedor y ejecutar comandos a mano.
+2. **Dockerfile funcional (principal)** → es el que debe usarse para correr el compilador automáticamente.
+
+   > ⚠️ Copia el contenido de `Docker2File` dentro de tu `Dockerfile` principal antes de construir la imagen.
+
+---
+
+### 1. Construir la imagen
 
 Desde la raíz del proyecto:
 
 ```bash
-docker build --rm -t compiscript-image .
+docker build -t compiscript:latest .
 ```
-
-### 2. Levantar el contenedor
-
-```bash
-sudo docker run  -p 8765:8765 -it --rm -v "$(pwd)/program":/program compiscript-image bash
-```
-
-Esto abrirá una shell dentro del contenedor con la carpeta `program/` montada.
 
 ---
 
-## ⚙️ Compilar la gramática
+### 2. Levantar el contenedor de forma automática (Docker funcional)
 
-Dentro del contenedor, genera el lexer, parser y visitor:
+Este arranca el compilador/servidor definido en `server.py`:
+
+```bash
+docker run -p 8765:8765 --rm compiscript:latest
+```
+
+* Expone el puerto `8765`.
+* Ejecuta directamente el comando por defecto:
+
+```bash
+CMD ["python3", "-u", "server.py"]
+```
+
+---
+
+### 3. Levantar el contenedor en modo manual (solo pruebas)
+
+Si quieres abrir una shell dentro del contenedor para compilar gramáticas o ejecutar programas a mano:
+
+```bash
+docker run -it --rm -p 8765:8765 -v "$(pwd)/program":/program compiscript:latest bash
+```
+
+Esto te deja en `/program`, con acceso al compilador y la gramática.
+
+---
+
+## ⚙️ Compilar la gramática manualmente
+
+Dentro del contenedor (modo pruebas):
 
 ```bash
 antlr -Dlanguage=Python3 -visitor CompiScript.g4
 ```
 
-Esto creará los archivos:
+Esto genera:
 
 * `CompiScriptLexer.py`
 * `CompiScriptParser.py`
@@ -48,15 +80,15 @@ Esto creará los archivos:
 
 ---
 
-## ▶️ Ejecutar un programa en CompiScript
+## ▶️ Ejecutar un programa en CompiScript (modo pruebas)
 
-Para probar un script escrito en `.cps`:
+Ejecuta el intérprete con un archivo `.cps`:
 
 ```bash
 python3 Driver.py program.cps
 ```
 
-Ejemplo en la shell del contenedor:
+Ejemplo:
 
 ```bash
 root@<container_id>:/program# python3 Driver.py program.cps
@@ -64,11 +96,11 @@ root@<container_id>:/program# python3 Driver.py program.cps
 
 ---
 
-## 💻 Ejecutar el IDE
+## 💻 Ejecutar el IDE (Next.js)
 
-El proyecto incluye un **IDE web** en Next.js para editar y ejecutar código en CompiScript.
+El proyecto incluye un **IDE web** para escribir y ejecutar código en CompiScript.
 
-### 1. Ir a la carpeta `ide`
+### 1. Ir a la carpeta del IDE
 
 ```bash
 cd ide
@@ -88,7 +120,7 @@ npm run dev
 
 ### 4. Abrir en el navegador
 
-Ir a 👉 [http://localhost:3000](http://localhost:3000)
+👉 [http://localhost:3000](http://localhost:3000)
 
 ---
 
@@ -96,7 +128,8 @@ Ir a 👉 [http://localhost:3000](http://localhost:3000)
 
 ```text
 .
-├── Dockerfile                        # Imagen Docker del compilador
+├── Dockerfile                        # Imagen principal (copiar contenido de Docker2File aquí)
+├── Docker2File                       # Docker funcional (para producción)
 ├── README.md                         # Este archivo
 ├── README.listener.md                 # Notas sobre listener
 ├── README_DOCKER.md                   # Notas sobre Docker
@@ -110,7 +143,7 @@ Ir a 👉 [http://localhost:3000](http://localhost:3000)
 │   ├── components/                    # Componentes UI (editor, terminal, etc.)
 │   ├── hooks/                         # Hooks personalizados
 │   ├── lib/                           # Utilidades
-│   ├── public/                        # Recursos estáticos (imágenes, íconos)
+│   ├── public/                        # Recursos estáticos
 │   ├── styles/                        # CSS global
 │   ├── package.json                   # Dependencias del IDE
 │   └── tsconfig.json                  # Configuración TypeScript
@@ -122,8 +155,9 @@ Ir a 👉 [http://localhost:3000](http://localhost:3000)
 │   ├── CompiScriptListener.py         # Listener generado
 │   ├── Driver.py                      # Entrada principal del compilador
 │   ├── SymbolTable.py                 # Tabla de símbolos
-│   ├── custom_types.py                # Sistema de tipos (integer, string, etc.)
-│   ├── type_check_visitor.py          # Chequeo semántico con Visitor
+│   ├── custom_types.py                # Sistema de tipos
+│   ├── type_check_visitor.py          # Chequeo semántico
+│   ├── server.py                      # Servidor del compilador
 │   ├── program.cps                    # Programa de ejemplo en CompiScript
 │   └── __pycache__/                   # Archivos compilados de Python
 ├── python-venv.sh                     # Script para crear entorno virtual
@@ -136,7 +170,7 @@ Ir a 👉 [http://localhost:3000](http://localhost:3000)
 
 * **Docker** instalado
 * **Node.js + npm** (para el IDE web)
-* **ANTLR4** (ya viene en el contenedor si usas Docker)
+* **ANTLR4** (ya incluido en el contenedor)
 
 ---
 
@@ -161,5 +195,12 @@ function factorial(n: integer): integer {
 
 print("Factorial de 5 = " + factorial(5));
 ```
+
+---
+
+✅ Con este `README.md` ya queda claro:
+
+* El **Dockerfile principal** debe contener el contenido de `Docker2File`.
+* Tienes un contenedor funcional para producción y otro opcional para pruebas manuales.
 
 ---
