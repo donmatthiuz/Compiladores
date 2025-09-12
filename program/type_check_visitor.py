@@ -206,13 +206,31 @@ class TypeCheckVisitor(CompiScriptVisitor):
         return l
 
     def visitEqualityExpr(self, ctx: CompiScriptParser.EqualityExprContext):
-        """Maneja operadores de igualdad: ==, !="""
+        """== y != con verificación de compatibilidad de tipos"""
         if len(ctx.relationalExpr()) == 1:
             return self.visit(ctx.relationalExpr(0))
-        _ = self.visit(ctx.relationalExpr(0))
+
+        def _comparable(a, b):
+            # numéricos entre si
+            if isinstance(a, (IntType, FloatType)) and isinstance(b, (IntType, FloatType)):
+                return True
+            # mismo tipo base
+            if type(a) is type(b):
+                return True
+            # clases con subtipado
+            if (isinstance(a, ClassType) and isinstance(b, (ClassType, NullType))) or \
+            (isinstance(b, ClassType) and isinstance(a, (ClassType, NullType))):
+                return self._are_types_compatible(a, b) or self._are_types_compatible(b, a)
+            return False
+
+        left_t = self.visit(ctx.relationalExpr(0))
         for i in range(1, len(ctx.relationalExpr())):
-            _ = self.visit(ctx.relationalExpr(i))
+            right_t = self.visit(ctx.relationalExpr(i))
+            if not _comparable(left_t, right_t):
+                raise TypeError(f"Tipos incompatibles en comparación de igualdad: {left_t} y {right_t}")
+            left_t = BoolType()
         return BoolType()
+
 
     def visitRelationalExpr(self, ctx: CompiScriptParser.RelationalExprContext):
         """Maneja operadores relacionales: <, <=, >, >="""
@@ -621,7 +639,7 @@ class TypeCheckVisitor(CompiScriptVisitor):
             for stmt in case_ctx.statement():
                 self.visit(stmt)
 
-        # Revisar default (si existe)
+        # Revisar default
         if ctx.defaultCase():
             for stmt in ctx.defaultCase().statement():
                 self.visit(stmt)
@@ -854,7 +872,11 @@ class TypeCheckVisitor(CompiScriptVisitor):
             raise TypeError(f"La condición en '{where}' debe ser de tipo boolean, no {cond_type}")
 
     def _are_types_compatible(self, expected, actual):
-        """Compatibilidad básica, con subtipado de clases y null asignable a clases."""
+        """Compatibilidad básica, con subtipado de clases, null para clases y arrays recursivos."""
+
+        if isinstance(expected, ArrayType) and isinstance(actual, ArrayType):
+            return self._are_types_compatible(expected.element_type, actual.element_type)
+
         if type(expected) is type(actual):
             if isinstance(expected, ClassType) and isinstance(actual, ClassType):
                 return self._is_subclass(actual.name, expected.name)

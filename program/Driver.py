@@ -5,7 +5,8 @@ from CompiScriptParser import CompiScriptParser
 from type_check_visitor import TypeCheckVisitor
 
 def main(argv):
-    input_stream = FileStream(argv[1])
+    
+    input_stream = FileStream(argv[1], encoding='utf-8')
     lexer = CompiScriptLexer(input_stream)
     stream = CommonTokenStream(lexer)
     parser = CompiScriptParser(stream)
@@ -14,8 +15,10 @@ def main(argv):
     visitor = TypeCheckVisitor()
     try:
         visitor.visit(tree)
+        return
     except (TypeError, NameError, SyntaxError) as e:
         print(f"{e}")
+        sys.exit(1)
 
 if __name__ == '__main__':
     main(sys.argv)

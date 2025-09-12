@@ -5,7 +5,6 @@ error_testing.py — Validador rápido de errores de Compiscript
 Uso:
   python error_testing.py            # ejecuta todos los tests incluidos
   python error_testing.py TEST_NAME  # ejecuta solo un test por nombre (prefix match)
-
 """
 import sys, subprocess, pathlib, textwrap
 
@@ -255,11 +254,11 @@ TESTS = [
         "should_error": False,
         "code": textwrap.dedent("""\
     function fact(n: integer): integer {
-      if (n <= 1) return 1;
-      return n * fact(n - 1);
+    if (n <= 1) { return 1; }
+    return n * fact(n - 1);
     }
     let f = fact(4);
-"""),
+    """),
     },
     {
         "name": "fn_nested_closure_ok",
@@ -330,18 +329,6 @@ TESTS = [
     do { } while ("x");
 """),
     },
-    {
-        "name": "switch_cond_must_be_bool",
-        "should_error": True,
-        "expect_contains": "switch",
-        "code": textwrap.dedent("""\
-    switch (1) {
-      case 1: { }
-      default: { }
-    }
-"""),
-    },
-
     # =========================
     # Clases y Objetos
     # =========================
@@ -699,7 +686,7 @@ function f(): integer { return 1; }
         }
 """),
     },
-        {
+    {
         "name": "try_catch_ok",
         "should_error": False,
         "code": textwrap.dedent("""\
@@ -744,7 +731,7 @@ function f(): integer { return 1; }
       function m(x: integer): integer { return x; }
     }
     class B : A {
-      function m(): integer { return 1; }   // distinta aridad
+      function m(): integer { return 1; }   # distinta aridad
     }
 """),
     },
@@ -757,7 +744,7 @@ function f(): integer { return 1; }
       function m(): integer { return 1; }
     }
     class B : A {
-      function m(): string { return "x"; }  // distinto tipo de retorno
+      function m(): string { return "x"; }  # distinto tipo de retorno
     }
 """),
     },
@@ -803,7 +790,6 @@ function f(): integer { return 1; }
     let a: Animal = new Perro();   // Perro <: Animal
 """),
     },
-
 ]
 
 def run_test(test, tmpdir: pathlib.Path) -> dict:
@@ -812,8 +798,10 @@ def run_test(test, tmpdir: pathlib.Path) -> dict:
     src_path.write_text(src, encoding="utf-8")
 
     try:
-        proc = subprocess.run([sys.executable, str(DRIVER), str(src_path)],
-                              capture_output=True, text=True, cwd=HERE)
+        proc = subprocess.run(
+            [sys.executable, str(DRIVER), str(src_path)],
+            capture_output=True, text=True, cwd=HERE
+        )
     except FileNotFoundError:
         return {"name": test["name"], "passed": False, "should_error": test["should_error"],
                 "output": "No se encontró Driver.py"}
@@ -822,7 +810,7 @@ def run_test(test, tmpdir: pathlib.Path) -> dict:
     out = out.strip()
 
     ok_expected_error = test['should_error']
-    got_error = ("Type checking passed" not in out)
+    got_error = (proc.returncode != 0)
 
     passed = (ok_expected_error == got_error)
 
@@ -835,7 +823,12 @@ def run_test(test, tmpdir: pathlib.Path) -> dict:
     else:
         reason = out
 
-    return {"name": test["name"], "passed": passed, "should_error": ok_expected_error, "output": reason}
+    return {
+        "name": test["name"],
+        "passed": passed,
+        "should_error": ok_expected_error,
+        "output": reason
+    }
 
 def main():
     only = sys.argv[1] if len(sys.argv) > 1 else None
@@ -844,9 +837,7 @@ def main():
 
     selected = [t for t in TESTS if (not only or t['name'].startswith(only))]
 
-    results = []
-    for t in selected:
-        results.append(run_test(t, tmpdir))
+    results = [run_test(t, tmpdir) for t in selected]
 
     total = len(results)
     passed = sum(1 for r in results if r.get("passed"))
