@@ -6,6 +6,11 @@ Este proyecto implementa el lenguaje **CompiScript** usando **ANTLR4** y **Pytho
 
 ---
 
+## Integrantes
+
+- Marlon Hernández 15177
+- Mathew Cordero 22982
+
 ## 🐳 Ejecución con Docker
 
 ### 1. Construir la imagen de Docker
