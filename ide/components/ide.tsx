@@ -38,7 +38,7 @@ export function IDE() {
         <Button variant="ghost" size="sm" onClick={() => setLeftPanelOpen(!leftPanelOpen)} className="h-8 w-8 p-0">
           {leftPanelOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
         </Button>
-        <h1 className="text-lg font-semibold">Simple IDE</h1>
+        <h1 className="text-lg font-semibold">IDE</h1>
         <div className="flex-1" />
         <Button variant="ghost" size="sm" onClick={() => setRightPanelOpen(!rightPanelOpen)} className="h-8 w-8 p-0">
           {rightPanelOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}

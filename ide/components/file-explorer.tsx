@@ -49,9 +49,7 @@ export function FileExplorer({ onFileSelect, activeFile }: FileExplorerProps) {
       path: "src",
       expanded: true,
       children: [
-        { name: "index.js", type: "file", path: "src/index.js" },
-        { name: "app.js", type: "file", path: "src/app.js" },
-        { name: "styles.css", type: "file", path: "src/styles.css" },
+      
       ],
     },
     {
@@ -59,12 +57,10 @@ export function FileExplorer({ onFileSelect, activeFile }: FileExplorerProps) {
       type: "folder",
       path: "public",
       children: [
-        { name: "index.html", type: "file", path: "public/index.html" },
-        { name: "favicon.ico", type: "file", path: "public/favicon.ico" },
+      
       ],
     },
-    { name: "package.json", type: "file", path: "package.json" },
-    { name: "README.md", type: "file", path: "README.md" },
+   
   ])
 
   const [newFileName, setNewFileName] = useState("")
