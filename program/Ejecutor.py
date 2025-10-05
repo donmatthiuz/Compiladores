@@ -17,9 +17,9 @@ def main(argv):
     try:
         visitor.visit(tree)
         
-        #codegen = CodeGenVisitor()
-        #codegen.visit(tree)
-        #codegen.table.display()
+        codegen = CodeGenVisitor()
+        codegen.visit(tree)
+        codegen.table.display()
         return
     except (TypeError, NameError, SyntaxError) as e:
         print(f"{e}")

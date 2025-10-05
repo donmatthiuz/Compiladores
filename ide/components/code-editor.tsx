@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { Button } from "./ui/button"
-import { Save, Play, Copy, Download } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Save, Play, Copy, Download, ChevronUp, ChevronDown, X, AlertCircle, AlertTriangle, Info } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface CodeError {
@@ -23,9 +23,13 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
   const [lineCount, setLineCount] = useState(1)
   const [errors, setErrors] = useState<CodeError[]>([])
   const [isConnected, setIsConnected] = useState(false)
+  const [showErrorPanel, setShowErrorPanel] = useState(false)
+  const [errorPanelHeight, setErrorPanelHeight] = useState(200)
+  const [selectedError, setSelectedError] = useState<number | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const websocketRef = useRef<WebSocket | null>(null)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const resizeRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setLocalContent(content)
@@ -36,6 +40,15 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
     setLineCount(lines)
   }, [localContent])
 
+  // Auto-mostrar panel cuando hay errores
+  useEffect(() => {
+    if (errors.length > 0 && isCompiScriptFile(activeFile)) {
+      setShowErrorPanel(true)
+    } else if (errors.length === 0) {
+      setShowErrorPanel(false)
+    }
+  }, [errors.length])
+
   // Función para verificar si el archivo es .cps
   const isCompiScriptFile = (fileName: string | null) => {
     return fileName?.endsWith('.cps') || false
@@ -44,7 +57,6 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
   // Conectar al WebSocket solo para archivos .cps
   useEffect(() => {
     if (!isCompiScriptFile(activeFile)) {
-      // Si no es un archivo .cps, desconectar WebSocket y limpiar errores
       if (websocketRef.current) {
         websocketRef.current.close()
         websocketRef.current = null
@@ -74,7 +86,6 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
           console.log("Desconectado del WebSocket")
           setIsConnected(false)
           websocketRef.current = null
-          // Intentar reconectar después de 3 segundos solo si el archivo sigue siendo .cps
           if (isCompiScriptFile(activeFile)) {
             setTimeout(connectWebSocket, 3000)
           }
@@ -101,17 +112,15 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
         clearTimeout(timeoutRef.current)
       }
     }
-  }, [activeFile]) // Dependencia en activeFile para reconectar cuando cambie
+  }, [activeFile])
 
   const parseErrors = (response: string) => {
-    // Solo parsear errores para archivos .cps
     if (!isCompiScriptFile(activeFile)) {
       return
     }
 
     const errors: CodeError[] = []
     
-    // Ignorar mensajes del servidor WebSocket
     if (response.includes("Servidor WebSocket escuchando en")) {
       return
     }
@@ -122,7 +131,6 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
       const line = lines[i].trim()
       if (!line) continue
       
-      // Patrón 1: "line 1:26 missing ';'"
       const lineColMatch = line.match(/line (\d+):(\d+)\s+(.+)/)
       if (lineColMatch) {
         const lineNum = parseInt(lineColMatch[1])
@@ -138,7 +146,6 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
         continue
       }
       
-      // Patrón 2: "line 5 unexpected token"
       const lineOnlyMatch = line.match(/line (\d+)\s+(.+)/)
       if (lineOnlyMatch) {
         const lineNum = parseInt(lineOnlyMatch[1])
@@ -152,7 +159,6 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
         continue
       }
       
-      // Patrón 3: "Error: something went wrong"
       const errorMatch = line.match(/^(Error|Warning|Info):\s*(.+)/)
       if (errorMatch) {
         const type = errorMatch[1].toLowerCase() as 'error' | 'warning' | 'info'
@@ -165,7 +171,6 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
         continue
       }
       
-      // Patrón 4: Cualquier línea que contenga palabras clave de error
       const errorKeywords = ['error', 'failed', 'exception', 'invalid', 'unexpected', 'missing', 'undefined', 'null']
       const warningKeywords = ['warning', 'deprecated', 'caution']
       
@@ -187,7 +192,6 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
         continue
       }
       
-      // Patrón 5: Si no coincide con nada anterior pero no está vacío y no es un mensaje del servidor
       if (line.length > 0 && !line.includes("conectado") && !line.includes("servidor")) {
         errors.push({
           message: line,
@@ -200,7 +204,6 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
   }
 
   const sendToWebSocket = useCallback((content: string, extension: string) => {
-    // Solo enviar al WebSocket para archivos .cps
     if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN && extension === 'cps') {
       const message = `${extension}\n${content}`
       websocketRef.current.send(message)
@@ -212,17 +215,13 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
     if (activeFile) {
       onContentChange(activeFile, value)
       
-      // Obtener la extensión del archivo
       const extension = activeFile.split(".").pop()?.toLowerCase() || "txt"
       
-      // Solo procesar para archivos .cps
       if (extension === 'cps') {
-        // Cancelar timeout anterior
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current)
         }
         
-        // Enviar al WebSocket después de 500ms de inactividad
         timeoutRef.current = setTimeout(() => {
           sendToWebSocket(value, extension)
         }, 500)
@@ -288,6 +287,17 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
     return errors.filter(error => error.line === lineNumber)
   }
 
+  const getErrorIcon = (type: 'error' | 'warning' | 'info') => {
+    switch (type) {
+      case 'error':
+        return <AlertCircle className="h-4 w-4 text-red-500" />
+      case 'warning':
+        return <AlertTriangle className="h-4 w-4 text-yellow-500" />
+      case 'info':
+        return <Info className="h-4 w-4 text-blue-500" />
+    }
+  }
+
   const getErrorTypeColor = (type: 'error' | 'warning' | 'info') => {
     switch (type) {
       case 'error':
@@ -300,6 +310,57 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
         return 'text-red-400'
     }
   }
+
+  const goToError = (error: CodeError, index: number) => {
+    setSelectedError(index)
+    if (error.line && textareaRef.current) {
+      const lines = localContent.split('\n')
+      let position = 0
+      for (let i = 0; i < error.line - 1; i++) {
+        position += lines[i].length + 1
+      }
+      if (error.column) {
+        position += error.column - 1
+      }
+      textareaRef.current.focus()
+      textareaRef.current.setSelectionRange(position, position)
+      textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }
+
+  // Manejo del resize del panel de errores
+  useEffect(() => {
+    const resizeElement = resizeRef.current
+    if (!resizeElement) return
+
+    let startY = 0
+    let startHeight = 0
+
+    const handleMouseDown = (e: MouseEvent) => {
+      startY = e.clientY
+      startHeight = errorPanelHeight
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+      e.preventDefault()
+    }
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = startY - e.clientY
+      const newHeight = Math.max(100, Math.min(500, startHeight + delta))
+      setErrorPanelHeight(newHeight)
+    }
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    resizeElement.addEventListener('mousedown', handleMouseDown)
+
+    return () => {
+      resizeElement.removeEventListener('mousedown', handleMouseDown)
+    }
+  }, [errorPanelHeight])
 
   if (!activeFile) {
     return (
@@ -315,6 +376,7 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
 
   const errorCount = errors.filter(e => e.type === 'error').length
   const warningCount = errors.filter(e => e.type === 'warning').length
+  const infoCount = errors.filter(e => e.type === 'info').length
   const isCompiScript = isCompiScriptFile(activeFile)
 
   return (
@@ -369,94 +431,200 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
         </div>
       </div>
 
-      {/* Editor */}
-      <div className="flex-1 flex relative overflow-hidden">
-        {/* Line numbers */}
-        <div className="w-12 bg-muted border-r border-border flex flex-col text-xs text-muted-foreground font-mono">
-          <div className="h-10 border-b border-border" />
-          <div className="flex-1 py-2">
-            {Array.from({ length: lineCount }, (_, i) => {
-              const lineNumber = i + 1
-              const lineErrors = getErrorsForLine(lineNumber)
-              const hasError = lineErrors.some(e => e.type === 'error')
-              const hasWarning = lineErrors.some(e => e.type === 'warning')
-              
-              return (
-                <div 
-                  key={lineNumber} 
-                  className={cn(
-                    "h-5 px-2 text-right leading-5 relative",
-                    hasError && "bg-red-500/20",
-                    !hasError && hasWarning && "bg-yellow-500/20"
-                  )}
-                  title={lineErrors.map(e => e.message).join('; ')}
-                >
-                  {lineNumber}
-                  {lineErrors.length > 0 && (
-                    <div className={cn(
-                      "absolute left-0 top-0 w-1 h-full",
-                      hasError && "bg-red-500",
-                      !hasError && hasWarning && "bg-yellow-500"
-                    )} />
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Code editor container */}
-        <div className="flex-1 relative">
-          {/* Error highlights overlay - solo para archivos .cps */}
-          {isCompiScript && (
-            <div className="absolute inset-0 p-4 font-mono text-sm leading-5 pointer-events-none overflow-auto whitespace-pre-wrap break-words">
-              {errors.filter(error => error.line && error.column).map((error, index) => {
-                const lines = localContent.split('\n')
-                const beforeLines = lines.slice(0, (error.line || 1) - 1)
-                const currentLine = lines[(error.line || 1) - 1] || ''
-                
-                const beforeColumn = currentLine.slice(0, (error.column || 1) - 1)
-                
-                const topOffset = (beforeLines.length * 20) // 20px per line (5 * 4 for leading-5)
-                const leftOffset = beforeColumn.length * 7.2 // Approximate character width
+      {/* Editor Container */}
+      <div className="flex-1 flex flex-col relative overflow-hidden">
+        {/* Editor */}
+        <div 
+          className="flex relative overflow-hidden"
+          style={{ height: showErrorPanel ? `calc(100% - ${errorPanelHeight}px)` : '100%' }}
+        >
+          {/* Line numbers */}
+          <div className="w-12 bg-muted border-r border-border flex flex-col text-xs text-muted-foreground font-mono">
+            <div className="h-10 border-b border-border" />
+            <div className="flex-1 py-2 overflow-hidden">
+              {Array.from({ length: lineCount }, (_, i) => {
+                const lineNumber = i + 1
+                const lineErrors = getErrorsForLine(lineNumber)
+                const hasError = lineErrors.some(e => e.type === 'error')
+                const hasWarning = lineErrors.some(e => e.type === 'warning')
                 
                 return (
-                  <div
-                    key={index}
+                  <div 
+                    key={lineNumber} 
                     className={cn(
-                      "absolute w-2 h-5 border-b-2",
-                      error.type === 'error' && "bg-red-500/50 border-red-500",
-                      error.type === 'warning' && "bg-yellow-500/50 border-yellow-500",
-                      error.type === 'info' && "bg-blue-500/50 border-blue-500"
+                      "h-5 px-2 text-right leading-5 relative",
+                      hasError && "bg-red-500/20",
+                      !hasError && hasWarning && "bg-yellow-500/20"
                     )}
-                    style={{
-                      top: `${topOffset}px`,
-                      left: `${leftOffset}px`,
-                    }}
-                    title={error.message}
-                  />
+                    title={lineErrors.map(e => e.message).join('; ')}
+                  >
+                    {lineNumber}
+                    {lineErrors.length > 0 && (
+                      <div className={cn(
+                        "absolute left-0 top-0 w-1 h-full",
+                        hasError && "bg-red-500",
+                        !hasError && hasWarning && "bg-yellow-500"
+                      )} />
+                    )}
+                  </div>
                 )
               })}
             </div>
-          )}
+          </div>
 
-          {/* Actual textarea */}
-          <textarea
-            ref={textareaRef}
-            value={localContent}
-            onChange={(e) => handleContentChange(e.target.value)}
-            className={cn(
-              "absolute inset-0 p-4 font-mono text-sm leading-5 resize-none outline-none",
-              "bg-background text-foreground caret-foreground",
-              "overflow-auto whitespace-pre-wrap break-words",
+          {/* Code editor container */}
+          <div className="flex-1 relative">
+            {/* Error highlights overlay */}
+            {isCompiScript && (
+              <div className="absolute inset-0 p-4 font-mono text-sm leading-5 pointer-events-none overflow-auto whitespace-pre-wrap break-words">
+                {errors.filter(error => error.line && error.column).map((error, index) => {
+                  const lines = localContent.split('\n')
+                  const lineIndex = (error.line || 1) - 1
+                  const beforeLines = lines.slice(0, lineIndex)
+                  const currentLine = lines[lineIndex] || ''
+                  
+                  const beforeColumn = currentLine.slice(0, (error.column || 1) - 1)
+                  
+                  // Calcular el offset vertical: cada línea ocupa 1.25rem (20px con leading-5)
+                  const topOffset = lineIndex * 20 + 16 // 16px es el padding-top
+                  // Calcular el offset horizontal: aproximadamente 0.6em por carácter en fuente monospace
+                  const leftOffset = beforeColumn.length * 8.4 + 16 // 16px es el padding-left
+                  
+                  return (
+                    <div
+                      key={index}
+                      className={cn(
+                        "absolute h-5 border-b-2",
+                        error.type === 'error' && "bg-red-500/50 border-red-500",
+                        error.type === 'warning' && "bg-yellow-500/50 border-yellow-500",
+                        error.type === 'info' && "bg-blue-500/50 border-blue-500"
+                      )}
+                      style={{
+                        top: `${topOffset}px`,
+                        left: `${leftOffset}px`,
+                        width: '8px',
+                      }}
+                      title={error.message}
+                    />
+                  )
+                })}
+              </div>
             )}
-            spellCheck={false}
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            data-gramm="false"
-          />
+
+            {/* Actual textarea */}
+            <textarea
+              ref={textareaRef}
+              value={localContent}
+              onChange={(e) => handleContentChange(e.target.value)}
+              className={cn(
+                "absolute inset-0 p-4 font-mono text-sm leading-5 resize-none outline-none",
+                "bg-background text-foreground caret-foreground",
+                "overflow-auto whitespace-pre-wrap break-words",
+              )}
+              spellCheck={false}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              data-gramm="false"
+            />
+          </div>
         </div>
+
+        {/* Error Panel */}
+        {showErrorPanel && isCompiScript && (
+          <div 
+            className="border-t border-border flex flex-col bg-card"
+            style={{ height: `${errorPanelHeight}px` }}
+          >
+            {/* Resize handle */}
+            <div
+              ref={resizeRef}
+              className="h-1 w-full bg-border hover:bg-primary cursor-ns-resize transition-colors"
+            />
+
+            {/* Panel header */}
+            <div className="h-8 border-b border-border flex items-center px-3 gap-2">
+              <div className="flex items-center gap-3 text-xs">
+                <span className="font-medium">Problems</span>
+                {errorCount > 0 && (
+                  <div className="flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3 text-red-500" />
+                    <span className="text-red-400">{errorCount}</span>
+                  </div>
+                )}
+                {warningCount > 0 && (
+                  <div className="flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3 text-yellow-500" />
+                    <span className="text-yellow-400">{warningCount}</span>
+                  </div>
+                )}
+                {infoCount > 0 && (
+                  <div className="flex items-center gap-1">
+                    <Info className="h-3 w-3 text-blue-500" />
+                    <span className="text-blue-400">{infoCount}</span>
+                  </div>
+                )}
+              </div>
+              <div className="flex-1" />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowErrorPanel(false)}
+                className="h-6 w-6 p-0"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+
+            {/* Error list */}
+            <div className="flex-1 overflow-auto">
+              {errors.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                  No problems detected
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {errors.map((error, index) => (
+                    <div
+                      key={index}
+                      onClick={() => goToError(error, index)}
+                      className={cn(
+                        "px-4 py-2 hover:bg-muted/50 cursor-pointer transition-colors",
+                        selectedError === index && "bg-muted"
+                      )}
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className="mt-0.5">
+                          {getErrorIcon(error.type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm text-foreground break-words">
+                            {error.message}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
+                            <span>{activeFile}</span>
+                            {error.line && (
+                              <>
+                                <span>•</span>
+                                <span>Line {error.line}</span>
+                                {error.column && (
+                                  <>
+                                    <span>•</span>
+                                    <span>Col {error.column}</span>
+                                  </>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Status bar */}
@@ -470,31 +638,21 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
         </span>
         <div className="flex-1" />
         {errors.length > 0 && isCompiScript && (
-          <div className="flex items-center gap-2">
-            {errorCount > 0 && (
-              <span className="text-red-400">
-                {errorCount} error{errorCount !== 1 ? 's' : ''}
-              </span>
-            )}
-            {warningCount > 0 && (
-              <>
-                {errorCount > 0 && <span className="mx-1">•</span>}
-                <span className="text-yellow-400">
-                  {warningCount} warning{warningCount !== 1 ? 's' : ''}
-                </span>
-              </>
-            )}
-            {errors[0] && (
-              <>
-                <span className="mx-2">•</span>
-                <div className={cn("max-w-md truncate", getErrorTypeColor(errors[0].type))}>
-                  {errors[0].line ? `Line ${errors[0].line}: ` : ''}{errors[0].message}
-                </div>
-              </>
-            )}
-            <span className="mx-2">•</span>
-          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowErrorPanel(!showErrorPanel)}
+            className="h-6 px-2 gap-1"
+          >
+            {getErrorIcon(errors[0].type)}
+            <span className={getErrorTypeColor(errors[0].type)}>
+              {errorCount} error{errorCount !== 1 ? 's' : ''}
+              {warningCount > 0 && `, ${warningCount} warning${warningCount !== 1 ? 's' : ''}`}
+            </span>
+            {showErrorPanel ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
+          </Button>
         )}
+        <span className="mx-2">•</span>
         <span>UTF-8</span>
       </div>
     </div>

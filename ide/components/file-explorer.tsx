@@ -52,14 +52,6 @@ export function FileExplorer({ onFileSelect, activeFile }: FileExplorerProps) {
       
       ],
     },
-    {
-      name: "public",
-      type: "folder",
-      path: "public",
-      children: [
-      
-      ],
-    },
    
   ])
 
