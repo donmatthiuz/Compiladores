@@ -31,6 +31,14 @@ export function IDE() {
     }))
   }
 
+  // Nueva función para manejar el contenido de archivos cargados
+  const handleFileContent = (filePath: string, content: string) => {
+    setFileContents((prev) => ({
+      ...prev,
+      [filePath]: content,
+    }))
+  }
+
   return (
     <div className="h-screen flex flex-col bg-background text-foreground">
       {/* Header */}
@@ -53,7 +61,11 @@ export function IDE() {
             <div className="h-10 bg-muted border-b border-border flex items-center px-3">
               <span className="text-sm font-medium">Explorer</span>
             </div>
-            <FileExplorer onFileSelect={handleFileSelect} activeFile={activeFile} />
+            <FileExplorer 
+              onFileSelect={handleFileSelect} 
+              activeFile={activeFile}
+              onFileContent={handleFileContent}
+            />
           </div>
         )}
 

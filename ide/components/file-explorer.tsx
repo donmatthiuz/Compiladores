@@ -14,10 +14,10 @@ import {
   Code,
   ImageIcon,
   Settings,
-
   Trash2,
   Edit3,
   FolderPlus,
+  Upload,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -27,11 +27,13 @@ interface FileNode {
   path: string
   children?: FileNode[]
   expanded?: boolean
+  content?: string // Para almacenar el contenido del archivo
 }
 
 interface FileExplorerProps {
   onFileSelect: (filePath: string) => void
   activeFile: string | null
+  onFileContent?: (filePath: string, content: string) => void // Callback para pasar el contenido
 }
 
 interface ContextMenu {
@@ -41,18 +43,15 @@ interface ContextMenu {
   visible: boolean
 }
 
-export function FileExplorer({ onFileSelect, activeFile }: FileExplorerProps) {
+export function FileExplorer({ onFileSelect, activeFile, onFileContent }: FileExplorerProps) {
   const [files, setFiles] = useState<FileNode[]>([
     {
       name: "src",
       type: "folder",
       path: "src",
       expanded: true,
-      children: [
-      
-      ],
+      children: [],
     },
-   
   ])
 
   const [newFileName, setNewFileName] = useState("")
@@ -62,6 +61,7 @@ export function FileExplorer({ onFileSelect, activeFile }: FileExplorerProps) {
   const [renamingNode, setRenamingNode] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState("")
   const contextMenuRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const getFileIcon = (fileName: string) => {
     const ext = fileName.split(".").pop()?.toLowerCase()
@@ -125,6 +125,41 @@ export function FileExplorer({ onFileSelect, activeFile }: FileExplorerProps) {
 
     if (!isFolder) {
       onFileSelect(newFileName)
+    }
+  }
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const uploadedFiles = event.target.files
+    if (!uploadedFiles || uploadedFiles.length === 0) return
+
+    Array.from(uploadedFiles).forEach((file) => {
+      const reader = new FileReader()
+
+      reader.onload = (e) => {
+        const content = e.target?.result as string
+
+        const newNode: FileNode = {
+          name: file.name,
+          type: "file",
+          path: file.name,
+          content: content,
+        }
+
+        setFiles((prev) => [...prev, newNode])
+
+        // Si hay un callback para el contenido, llamarlo
+        if (onFileContent) {
+          onFileContent(file.name, content)
+        }
+      }
+
+      // Leer como texto
+      reader.readAsText(file)
+    })
+
+    // Limpiar el input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
     }
   }
 
@@ -207,6 +242,10 @@ export function FileExplorer({ onFileSelect, activeFile }: FileExplorerProps) {
               toggleFolder(node.path)
             } else {
               onFileSelect(node.path)
+              // Si hay contenido y callback, pasarlo
+              if (node.content && onFileContent) {
+                onFileContent(node.path, node.content)
+              }
             }
           }}
           onContextMenu={(e) => handleContextMenu(e, node)}
@@ -316,7 +355,26 @@ export function FileExplorer({ onFileSelect, activeFile }: FileExplorerProps) {
           <FolderPlus className="h-4 w-4" />
           New Folder
         </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => fileInputRef.current?.click()}
+          className="w-full justify-start gap-2 h-8"
+        >
+          <Upload className="h-4 w-4" />
+          Upload File
+        </Button>
       </div>
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={handleFileUpload}
+        className="hidden"
+        accept="*/*"
+      />
 
       {/* Context Menu */}
       {contextMenu.visible && contextMenu.node && (
