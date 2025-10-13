@@ -229,6 +229,8 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
     }
   }
 
+  
+
   const handleSave = () => {
     if (activeFile) {
       console.log(`Saving ${activeFile}:`, localContent)
@@ -236,10 +238,16 @@ export function CodeEditor({ activeFile, content, onContentChange }: CodeEditorP
   }
 
   const handleRun = () => {
-    if (activeFile) {
-      console.log(`Running ${activeFile}:`, localContent)
+    if (activeFile && isCompiScriptFile(activeFile)) {
+      const extension = activeFile.split(".").pop()?.toLowerCase() || "cps"
+      const message = `${extension}|runner\n${localContent}`
+      if (websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
+        websocketRef.current.send(message)
+      }
+      console.log(message)
     }
   }
+
 
   const handleCopy = () => {
     navigator.clipboard.writeText(localContent)
