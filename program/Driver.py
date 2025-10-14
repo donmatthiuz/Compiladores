@@ -21,6 +21,7 @@ def main(argv):
 
     # Type checking siempre
     visitor = TypeCheckVisitor()
+    
     try:
         visitor.visit(tree)
     except (TypeError, NameError, SyntaxError) as e:
@@ -29,7 +30,8 @@ def main(argv):
 
     # Solo si es runner, generar código
     if mode == "runner":
-        codegen = CodeGenVisitor()
+
+        codegen = CodeGenVisitor(visitor.symbol_table)
         codegen.visit(tree)
         codegen.table.display()  # o cualquier acción que quieras ejecutar
     else:
