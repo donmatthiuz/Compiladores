@@ -31,7 +31,6 @@ def main(argv):
     if mode == "runner":
         codegen = CodeGenVisitor()
         codegen.visit(tree)
-
         codegen.table.display()  # o cualquier acción que quieras ejecutar
     else:
         # debug: solo type check
