@@ -4,7 +4,6 @@ from CompiScriptLexer import CompiScriptLexer
 from CompiScriptParser import CompiScriptParser
 from type_check_visitor import TypeCheckVisitor
 from CodeGenVisitor import CodeGenVisitor
-
 def main(argv):
     if len(argv) < 2:
         print("Uso: python Driver.py <archivo.cps> [debug|runner]")
@@ -30,8 +29,12 @@ def main(argv):
 
     # Solo si es runner, generar código
     if mode == "runner":
+        
+        
+        print("=== Tabla reconstruida ===")
+        print(visitor.linked_table.display())
 
-        codegen = CodeGenVisitor(visitor.symbol_table)
+        codegen = CodeGenVisitor(visitor.linked_table, visitor.symbol_table)
         codegen.visit(tree)
         codegen.table.display()  # o cualquier acción que quieras ejecutar
     else:

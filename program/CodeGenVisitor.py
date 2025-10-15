@@ -2,11 +2,61 @@ from CompiScriptVisitor import CompiScriptVisitor
 from QuadrupleTable import QuadrupleTable
 
 class CodeGenVisitor(CompiScriptVisitor):
-    def __init__(self, table):
-        self.table_symbols = table
+    def __init__(self, linked_table, symbol_table):
+        """
+        linked_table: LinkedTable para navegación de scopes
+        symbol_table: SymbolTable original para lookup de símbolos
+        """
+        self.linked_table = linked_table
+        self.symbol_table = symbol_table
         self.table = QuadrupleTable()
-        self.current_function = None  # Para saber en qué función estamos
-        self.param_offset = 0 
+        self.current_function = None
+        self.param_offset = 0
+        
+        # Stack para trackear el scope actual en LinkedTable
+        self.scope_stack = [linked_table.root]
+        self.current_scope_node = linked_table.root
+        
+        # Índice para saber qué hijo visitar en cada scope
+        self.child_index = {}  # scope_id -> próximo índice de hijo
+
+    def _enter_scope(self):
+        """Entra al siguiente scope hijo disponible"""
+        parent_id = self.current_scope_node.id
+        
+        # Obtener índice del siguiente hijo a visitar
+        child_idx = self.child_index.get(parent_id, 0)
+        
+        # Verificar que hay hijos disponibles
+        if child_idx < len(self.current_scope_node.children):
+            next_child = self.current_scope_node.children[child_idx]
+            
+            # Actualizar índice para la próxima vez
+            self.child_index[parent_id] = child_idx + 1
+            
+            # Cambiar al nuevo scope
+            self.current_scope_node = next_child
+            self.scope_stack.append(next_child)
+        
+    def _exit_scope(self):
+        """Sale del scope actual"""
+        if len(self.scope_stack) > 1:
+            self.scope_stack.pop()
+            self.current_scope_node = self.scope_stack[-1]
+
+    def _get_qualified_name(self, var_name):
+        """
+        Genera un nombre cualificado para una variable basado en su scope.
+        Ejemplo: x en scope 0 -> x_0, x en scope 3 -> x_3
+        """
+        scope_id = self.current_scope_node.id
+        
+        # Variables globales (scope 0) no necesitan cualificación
+        if scope_id == 0:
+            return var_name
+        
+        # Variables en otros scopes se cualifican con el ID del scope
+        return f"{var_name}_{scope_id}"
 
     # --- Programa principal
     def visitProgram(self, ctx):
@@ -16,39 +66,37 @@ class CodeGenVisitor(CompiScriptVisitor):
                 self.visit(child)
         return None
 
+    # --- Bloque
+    def visitBlock(self, ctx):
+        """Maneja bloques con scopes"""
+        self._enter_scope()
+        try:
+            for stmt in ctx.statement():
+                self.visit(stmt)
+        finally:
+            self._exit_scope()
+        return None
+
     # --- Declaración de variable: let/var x = expr;
     def visitVariableDeclaration(self, ctx):
         var = ctx.Identifier().getText()
+        qualified_var = self._get_qualified_name(var)
 
         # Si existe inicialización
         if ctx.initializer():
             value = self.visit(ctx.initializer())
-            self.table.add("=", value, None, var)
+            self.table.add("=", value, None, qualified_var)
 
-        # Si tiene anotación de tipo, podrías guardarla en la tabla de símbolos
-        if ctx.typeAnnotation():
-            type_ = ctx.typeAnnotation().getText().replace(":", "").strip()
-            sym = self.table_symbols.lookup(var)
-            if sym:
-                sym.type_ = type_
-
-        return var
+        return qualified_var
 
     # --- Declaración de constante: const PI: integer = 314;
     def visitConstantDeclaration(self, ctx):
         const_name = ctx.Identifier().getText()
+        qualified_name = self._get_qualified_name(const_name)
         value = self.visit(ctx.expression())
 
-        self.table.add("=", value, None, const_name)
-
-        # Anotar tipo si lo tiene
-        if ctx.typeAnnotation():
-            type_ = ctx.typeAnnotation().getText().replace(":", "").strip()
-            sym = self.table_symbols.lookup(const_name)
-            if sym:
-                sym.type_ = type_
-
-        return const_name
+        self.table.add("=", value, None, qualified_name)
+        return qualified_name
 
     # --- Inicializador: = expr
     def visitInitializer(self, ctx):
@@ -57,9 +105,31 @@ class CodeGenVisitor(CompiScriptVisitor):
     # --- Asignación: x = expr;
     def visitAssignment(self, ctx):
         var = ctx.Identifier().getText()
+        
+        # Buscar en qué scope está definida la variable
+        qualified_var = self._find_variable_in_scopes(var)
+        
         value = self.visit(ctx.expression())
-        self.table.add("=", value, None, var)
-        return var
+        self.table.add("=", value, None, qualified_var)
+        return qualified_var
+
+    def _find_variable_in_scopes(self, var_name):
+        """
+        Busca una variable en el scope actual y sus padres,
+        retornando el nombre cualificado correcto.
+        """
+        # Recorrer desde el scope actual hacia arriba
+        current = self.current_scope_node
+        while current is not None:
+            if var_name in current.symbols:
+                # Encontrada! Retornar nombre cualificado
+                if current.id == 0:
+                    return var_name  # Global
+                return f"{var_name}_{current.id}"
+            current = current.parent
+        
+        # No encontrada (error semántico, pero aquí solo retornamos el nombre)
+        return var_name
 
     # --- Print: print(expr);
     def visitPrintStatement(self, ctx):
@@ -75,7 +145,6 @@ class CodeGenVisitor(CompiScriptVisitor):
         return self.visit(ctx.conditionalExpr())
 
     def visitTernaryExpr(self, ctx):
-        # No implementamos operador ternario aún
         return self.visit(ctx.logicalOrExpr())
 
     # --- Expresiones lógicas con || y &&
@@ -162,7 +231,7 @@ class CodeGenVisitor(CompiScriptVisitor):
         elif ctx.leftHandSide():
             return self.visit(ctx.leftHandSide())
         elif ctx.expression():
-            return self.visit(ctx.expression())  # (expr)
+            return self.visit(ctx.expression())
         return None
 
     def visitLiteralExpr(self, ctx):
@@ -177,7 +246,6 @@ class CodeGenVisitor(CompiScriptVisitor):
         
         for suffix in ctx.suffixOp():
             if suffix.getChildCount() > 0 and suffix.getChild(0).getText() == '(':
-                # Es una llamada a función
                 base = self.visitCallExprWithBase(suffix, base)
             else:
                 base = self.visit(suffix)
@@ -197,7 +265,8 @@ class CodeGenVisitor(CompiScriptVisitor):
         return temp
 
     def visitIdentifierExpr(self, ctx):
-        return ctx.Identifier().getText()
+        var_name = ctx.Identifier().getText()
+        return self._find_variable_in_scopes(var_name)
 
     def visitNewExpr(self, ctx):
         return f"new {ctx.Identifier().getText()}"
@@ -211,31 +280,40 @@ class CodeGenVisitor(CompiScriptVisitor):
     def visitFunctionDeclaration(self, ctx):
         func_name = ctx.Identifier().getText()
         self.current_function = func_name
-
-        # Guardar función en tabla de símbolos
-        if not self.table_symbols.lookup_current_scope(func_name):
-            self.table_symbols.define(func_name, "function")
-
         
-        # Guardar el inicio de la función en cuádruplas
+        # Marca inicio de función
         self.table.add("func", None, None, func_name)
-
-        # Parámetros
-        if ctx.parameters():
-            for param_ctx in ctx.parameters().parameter():
-                param_name = param_ctx.Identifier().getText()
-                param_type = param_ctx.type_().getText() if param_ctx.type_() else "any"
-                # Definir el parámetro en la tabla de símbolos
-                self.table_symbols.define(param_name, param_type)
-                self.table.add("param", None, None, param_name)
         
-        # Bloque de la función
-        self.visit(ctx.block())
-
-        # Marca de fin de función
-        self.table.add("endfunc", None, None, func_name)
-
-        self.current_function = None
+        # Entrar al scope de la función
+        self._enter_scope()
+        
+        try:
+            # Parámetros (están en el scope de la función, no en el bloque)
+            if ctx.parameters():
+                for param_ctx in ctx.parameters().parameter():
+                    param_name = param_ctx.Identifier().getText()
+                    qualified_param = self._get_qualified_name(param_name)
+                    self.table.add("param", None, None, qualified_param)
+            
+            # El bloque de la función es un hijo del scope de función
+            # No llamamos self.visit(ctx.block()) porque eso crearía otro scope
+            # En su lugar, procesamos las declaraciones directamente
+            if ctx.block():
+                # Entrar al scope del bloque
+                self._enter_scope()
+                try:
+                    for stmt in ctx.block().statement():
+                        self.visit(stmt)
+                finally:
+                    self._exit_scope()
+            
+            # Marca fin de función
+            self.table.add("endfunc", None, None, func_name)
+        
+        finally:
+            self._exit_scope()
+            self.current_function = None
+        
         return None
 
     # --- Llamada a función: identifier(args)

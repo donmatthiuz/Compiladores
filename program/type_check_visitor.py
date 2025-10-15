@@ -2,6 +2,8 @@ from CompiScriptParser import CompiScriptParser
 from CompiScriptVisitor import CompiScriptVisitor
 from custom_types import IntType, FloatType, StringType, BoolType, NullType, ArrayType, ClassType, FunctionType
 from SymbolTable import SymbolTable
+from  LinkedTable import LinkedTable, LinkedScope
+
 
 CF_RETURN = object()
 CF_BREAK = object()
@@ -35,20 +37,27 @@ class TypeCheckVisitor(CompiScriptVisitor):
         self.current_class = None
         self.in_method = False
         self.in_constructor = False
+        self.all_scopes = [self.symbol_table]
+        self.linked_table = LinkedTable()
+
+
 
     # ==========================
     # ÁMBITOS
     # ==========================
-    def enter_scope(self):
+    def enter_scope(self,context_type="block", context_name=None):
         """Entra a un nuevo ámbito"""
         new_scope = SymbolTable(parent=self.current_scope)
         self.current_scope = new_scope
+        self.linked_table.enter_scope(context_type=context_type, context_name=context_name)
+        self.all_scopes.append(new_scope)
         return new_scope
 
     def exit_scope(self):
         """Sale del ámbito actual"""
         if self.current_scope.parent:
             self.current_scope = self.current_scope.parent
+            self.linked_table.exit_scope()
 
     # =====================================
     # PROGRAMA Y STATEMENTS
@@ -60,7 +69,7 @@ class TypeCheckVisitor(CompiScriptVisitor):
         return None
 
     def visitBlock(self, ctx: CompiScriptParser.BlockContext):
-        self.enter_scope()
+        self.enter_scope(context_type="block", context_name=None)
         try:
             stmts = list(ctx.statement())
             for i, st in enumerate(stmts):
@@ -97,6 +106,7 @@ class TypeCheckVisitor(CompiScriptVisitor):
             var_type = NullType()
 
         self.current_scope.define(var_name, var_type)
+        self.linked_table.add_symbol(var_name, var_type) 
         return var_type
 
     def visitConstantDeclaration(self, ctx: CompiScriptParser.ConstantDeclarationContext):
@@ -113,6 +123,7 @@ class TypeCheckVisitor(CompiScriptVisitor):
         
         # Agregar a la tabla de símbolos
         self.current_scope.define(const_name, const_type)
+        self.linked_table.add_symbol(const_name, const_type) 
         return const_type
 
     def visitInitializer(self, ctx: CompiScriptParser.InitializerContext):
@@ -737,7 +748,6 @@ class TypeCheckVisitor(CompiScriptVisitor):
     # FUNCIONES
     # =====================================
     def visitFunctionDeclaration(self, ctx: CompiScriptParser.FunctionDeclarationContext):
-        # Firma y registro del símbolo de la función en el scope actual
         fname = ctx.Identifier().getText()
         param_types = []
         if ctx.parameters():
@@ -750,6 +760,7 @@ class TypeCheckVisitor(CompiScriptVisitor):
 
         # Define el símbolo de la función
         self.current_scope.define(fname, FunctionType(param_types, ret_type))
+        self.linked_table.add_symbol(fname, FunctionType(param_types, ret_type))
 
         # Detecta parámetros duplicados
         seen = set()
@@ -761,7 +772,8 @@ class TypeCheckVisitor(CompiScriptVisitor):
 
         # Scope de la función
         self.function_depth += 1
-        self.enter_scope()
+        self.enter_scope(context_type="function", context_name=fname)
+
         pushed = False
         try:
             # declara parámetros en el scope
@@ -769,6 +781,7 @@ class TypeCheckVisitor(CompiScriptVisitor):
                 for i, p in enumerate(ctx.parameters().parameter()):
                     pname = p.Identifier().getText()
                     self.current_scope.define(pname, param_types[i])
+                    self.linked_table.add_symbol(pname, param_types[i])
 
             self._function_return_stack.append(ret_type)
             pushed = True
@@ -779,7 +792,8 @@ class TypeCheckVisitor(CompiScriptVisitor):
             self.exit_scope()
             self.function_depth -= 1
         return None
-
+    
+    
     def visitCallExpr(self, ctx: CompiScriptParser.CallExprContext):
         fname = ctx.parentCtx.primaryAtom().getText() if hasattr(ctx.parentCtx, "primaryAtom") else None
 
