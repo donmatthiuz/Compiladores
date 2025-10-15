@@ -20,6 +20,9 @@ class CodeGenVisitor(CompiScriptVisitor):
         # Índice para saber qué hijo visitar en cada scope
         self.child_index = {}  # scope_id -> próximo índice de hijo
 
+        self.break_stack = []
+        self.continue_stack = []
+
     def _enter_scope(self):
         """Entra al siguiente scope hijo disponible"""
         parent_id = self.current_scope_node.id
@@ -376,4 +379,149 @@ class CodeGenVisitor(CompiScriptVisitor):
         # Fin del try/catch
         self.table.add("label", None, None, end_catch)
 
+        return None
+
+    def visitIfStatement(self, ctx):
+        cond = self.visit(ctx.expression())
+        Lfalse = self.table.new_label()
+        Lend = self.table.new_label()
+
+        self.table.add("gotof", cond, None, Lfalse)
+
+        # then
+        self.visit(ctx.block(0))
+
+        self.table.add("goto", None, None, Lend)
+        self.table.add("label", None, None, Lfalse)
+
+        # else
+        if ctx.block(1):
+            self.visit(ctx.block(1))
+
+        self.table.add("label", None, None, Lend)
+        return None
+
+    def visitWhileStatement(self, ctx):
+        Lstart = self.table.new_label()
+        Lend = self.table.new_label()
+
+        # continue vuelve a evaluar la condición
+        self.continue_stack.append(Lstart)
+        self.break_stack.append(Lend)
+
+        self.table.add("label", None, None, Lstart)
+
+        cond = self.visit(ctx.expression())
+        self.table.add("gotof", cond, None, Lend)
+
+        self.visit(ctx.block())
+
+        self.table.add("goto", None, None, Lstart)
+        self.table.add("label", None, None, Lend)
+
+        self.continue_stack.pop()
+        self.break_stack.pop()
+        return None
+
+
+    def visitDoWhileStatement(self, ctx):
+        Lstart = self.table.new_label()
+        Lend = self.table.new_label()
+
+        # continue evalua la condición al final
+        self.continue_stack.append(Lstart)
+        self.break_stack.append(Lend)
+
+        self.table.add("label", None, None, Lstart)
+        self.visit(ctx.block())
+
+        cond = self.visit(ctx.expression())
+        self.table.add("gotof", cond, None, Lend)
+        self.table.add("goto", None, None, Lstart)
+        self.table.add("label", None, None, Lend)
+
+        self.continue_stack.pop()
+        self.break_stack.pop()
+        return None
+
+    def visitForStatement(self, ctx):
+        # init
+        if ctx.variableDeclaration():
+            self.visit(ctx.variableDeclaration())
+        elif ctx.assignment():
+            self.visit(ctx.assignment())
+
+        Lstart = self.table.new_label()
+        Lcont = self.table.new_label()
+        Lend = self.table.new_label()
+
+        self.continue_stack.append(Lcont)
+        self.break_stack.append(Lend)
+
+        self.table.add("label", None, None, Lstart)
+
+        # cond
+        if ctx.expression(0):
+            cond = self.visit(ctx.expression(0))
+            self.table.add("gotof", cond, None, Lend)
+
+        # cuerpo
+        self.visit(ctx.block())
+
+        # incremento
+        self.table.add("label", None, None, Lcont)
+        if ctx.expression(1):
+            self.visit(ctx.expression(1))
+
+        self.table.add("goto", None, None, Lstart)
+        self.table.add("label", None, None, Lend)
+
+        self.continue_stack.pop()
+        self.break_stack.pop()
+        return None
+
+    def visitBreakStatement(self, ctx):
+        target = self.break_stack[-1]
+        self.table.add("goto", None, None, target)
+        return None
+
+    def visitContinueStatement(self, ctx):
+        target = self.continue_stack[-1]
+        self.table.add("goto", None, None, target)
+        return None
+
+    def visitSwitchStatement(self, ctx):
+        discr = self.visit(ctx.expression())
+        Lend = self.table.new_label()
+
+        # Preparar labels por case
+        case_labels = []
+        for _ in ctx.switchCase():
+            case_labels.append(self.table.new_label())
+
+        Ldefault = self.table.new_label() if ctx.defaultCase() else Lend
+
+        for i, case_ctx in enumerate(ctx.switchCase()):
+            case_val = self.visit(case_ctx.expression())
+            tcmp = self.table.new_temp()
+            self.table.add("==", discr, case_val, tcmp)
+            Lnext = self.table.new_label()
+            self.table.add("gotof", tcmp, None, Lnext)
+            self.table.add("goto", None, None, case_labels[i])
+            self.table.add("label", None, None, Lnext)
+
+        self.table.add("goto", None, None, Ldefault)
+
+        for i, case_ctx in enumerate(ctx.switchCase()):
+            self.table.add("label", None, None, case_labels[i])
+            for st in case_ctx.statement():
+                self.visit(st)
+            self.table.add("goto", None, None, Lend)
+
+        if ctx.defaultCase():
+            self.table.add("label", None, None, Ldefault)
+            for st in ctx.defaultCase().statement():
+                self.visit(st)
+
+        self.table.add("label", None, None, Lend)
         return None
