@@ -33,7 +33,7 @@ def run_driver(code: str):
     with tempfile.TemporaryDirectory() as td:
         td = pathlib.Path(td)
         src = td / "tmp.cps"
-        src.write_text(code, encoding="utf-8")
+        src.write_text(code + "\n", encoding="utf-8")
         proc = subprocess.run(
             [sys.executable, str(DRIVER), str(src), "runner"],
             capture_output=True, text=True, cwd=HERE
@@ -127,7 +127,7 @@ TESTS = [
 ]
 
 def run_test(test: dict) -> dict:
-    code = test["code"].strip() + "\\n"
+    code = test["code"].strip()
     rc, out = run_driver(code)
     quads = parse_quads(out)
     ok = (rc == 0) and test["check"](quads)
@@ -149,7 +149,7 @@ def main():
     results = [run_test(t) for t in selected]
     total = len(results)
     passed = sum(1 for r in results if r["passed"])
-    print(f"Tests Codegen: {passed}/{total} pasaron.\\n")
+    print(f"Tests Codegen: {passed}/{total} pasaron.")
     for r in results:
         mark = "✅" if r["passed"] else "❌"
         print(f"{mark} {r['name']}")

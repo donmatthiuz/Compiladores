@@ -111,10 +111,26 @@ class CodeGenVisitor(CompiScriptVisitor):
         
         # Buscar en qué scope está definida la variable
         qualified_var = self._find_variable_in_scopes(var)
-        
-        value = self.visit(ctx.expression())
+
+        expr_node = ctx.expression()
+        if isinstance(expr_node, list):
+            expr_node = expr_node[0]
+
+        value = self.visit(expr_node)
         self.table.add("=", value, None, qualified_var)
         return qualified_var
+    
+    def visitAssignmentExpr(self, ctx):
+        if ctx.getChildCount() == 3 and ctx.getChild(1).getText() == '=':
+            lhs_ctx = ctx.getChild(0)
+            rhs_ctx = ctx.getChild(2)
+
+            lhs_addr = self.visit(lhs_ctx)
+            rhs_val  = self.visit(rhs_ctx)
+
+            self.table.add("=", rhs_val, None, lhs_addr)
+            return lhs_addr
+        return self.visitChildren(ctx)
 
     def _find_variable_in_scopes(self, var_name):
         """
@@ -394,7 +410,7 @@ class CodeGenVisitor(CompiScriptVisitor):
         self.table.add("goto", None, None, Lend)
         self.table.add("label", None, None, Lfalse)
 
-        # else
+        # else  
         if ctx.block(1):
             self.visit(ctx.block(1))
 
