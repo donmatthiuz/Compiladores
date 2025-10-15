@@ -5,6 +5,8 @@ class CodeGenVisitor(CompiScriptVisitor):
     def __init__(self, table):
         self.table_symbols = table
         self.table = QuadrupleTable()
+        self.current_function = None  # Para saber en qué función estamos
+        self.param_offset = 0 
 
     # --- Programa principal
     def visitProgram(self, ctx):
@@ -171,7 +173,28 @@ class CodeGenVisitor(CompiScriptVisitor):
         return ctx.getText()
 
     def visitLeftHandSide(self, ctx):
-        return self.visit(ctx.primaryAtom())
+        base = self.visit(ctx.primaryAtom())
+        
+        for suffix in ctx.suffixOp():
+            if suffix.getChildCount() > 0 and suffix.getChild(0).getText() == '(':
+                # Es una llamada a función
+                base = self.visitCallExprWithBase(suffix, base)
+            else:
+                base = self.visit(suffix)
+        
+        return base
+
+    def visitCallExprWithBase(self, ctx, func_name):
+        args = []
+        if ctx.arguments():
+            for expr_ctx in ctx.arguments().expression():
+                arg_val = self.visit(expr_ctx)
+                args.append(arg_val)
+                self.table.add("arg", arg_val, None, None)
+        
+        temp = self.table.new_temp()
+        self.table.add("call", func_name, len(args), temp)
+        return temp
 
     def visitIdentifierExpr(self, ctx):
         return ctx.Identifier().getText()
@@ -184,3 +207,52 @@ class CodeGenVisitor(CompiScriptVisitor):
 
     def visitChildren(self, node):
         return super().visitChildren(node)
+    
+    def visitFunctionDeclaration(self, ctx):
+        func_name = ctx.Identifier().getText()
+        self.current_function = func_name
+
+        # Guardar función en tabla de símbolos
+        if not self.table_symbols.lookup_current_scope(func_name):
+            self.table_symbols.define(func_name, "function")
+
+        
+        # Guardar el inicio de la función en cuádruplas
+        self.table.add("func", None, None, func_name)
+
+        # Parámetros
+        if ctx.parameters():
+            for param_ctx in ctx.parameters().parameter():
+                param_name = param_ctx.Identifier().getText()
+                param_type = param_ctx.type_().getText() if param_ctx.type_() else "any"
+                # Definir el parámetro en la tabla de símbolos
+                self.table_symbols.define(param_name, param_type)
+                self.table.add("param", None, None, param_name)
+        
+        # Bloque de la función
+        self.visit(ctx.block())
+
+        # Marca de fin de función
+        self.table.add("endfunc", None, None, func_name)
+
+        self.current_function = None
+        return None
+
+    # --- Llamada a función: identifier(args)
+    def visitCallExpr(self, ctx):
+        func_name = ctx.getChild(0).getText()
+        args = []
+        if ctx.arguments():
+            for expr_ctx in ctx.arguments().expression():
+                arg_val = self.visit(expr_ctx)
+                args.append(arg_val)
+                self.table.add("arg", arg_val, None, None)
+        temp = self.table.new_temp()
+        self.table.add("call", func_name, len(args), temp)
+        return temp
+
+    # --- Return
+    def visitReturnStatement(self, ctx):
+        value = self.visit(ctx.expression()) if ctx.expression() else None
+        self.table.add("return", value, None, None)
+        return None
