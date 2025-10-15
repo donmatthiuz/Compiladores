@@ -2,10 +2,15 @@ class QuadrupleTable:
     def __init__(self):
         self.quadruples = []
         self.temp_count = 0
+        self.label_count = 0  # Para generar labels únicos
 
     def new_temp(self):
         self.temp_count += 1
         return f"t{self.temp_count}"
+
+    def new_label(self):
+        self.label_count += 1
+        return f"L{self.label_count}"
 
     def add(self, operator, op1, op2, result):
         self.quadruples.append((operator, op1, op2, result))
@@ -19,5 +24,3 @@ class QuadrupleTable:
             op2 = quad[2] or ""
             res = quad[3] or ""
             print(f"{op:<10} {op1:<10} {op2:<10} {res:<10}")
-
-

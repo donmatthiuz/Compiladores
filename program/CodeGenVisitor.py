@@ -334,3 +334,46 @@ class CodeGenVisitor(CompiScriptVisitor):
         value = self.visit(ctx.expression()) if ctx.expression() else None
         self.table.add("return", value, None, None)
         return None
+    
+    def visitTryCatchStatement(self, ctx):
+        # Etiquetas para control de flujo
+        start_try = self.table.new_label()
+        end_try = self.table.new_label()
+        start_catch = self.table.new_label()
+        end_catch = self.table.new_label()
+
+        # --- Bloque TRY ---
+        self.table.add("label", None, None, start_try)
+
+        # Entrar al scope del bloque try
+        self._enter_scope()
+        try:
+            for stmt in ctx.block(0).statement():
+                self.visit(stmt)
+        finally:
+            self._exit_scope()
+
+        # Saltar al final si no hubo excepción
+        self.table.add("goto", None, None, end_catch)
+
+        # --- Bloque CATCH ---
+        self.table.add("label", None, None, start_catch)
+
+        # Entrar al scope del catch
+        self._enter_scope()
+        try:
+            # Variable catch (excepción)
+            exception_var = ctx.Identifier().getText()
+            qualified_exception = self._get_qualified_name(exception_var)
+            self.table.add("catch_param", None, None, qualified_exception)
+
+            # Visitamos los statements del bloque catch
+            for stmt in ctx.block(1).statement():
+                self.visit(stmt)
+        finally:
+            self._exit_scope()
+
+        # Fin del try/catch
+        self.table.add("label", None, None, end_catch)
+
+        return None
