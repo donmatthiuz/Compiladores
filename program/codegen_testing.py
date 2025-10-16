@@ -6,6 +6,9 @@ DRIVER = HERE / "Driver.py"
 HEADER_PATTERN = re.compile(r"^\s*Operador\s+Op1\s+Op2\s+Resultado\s*$")
 
 def parse_quads(stdout: str):
+    """
+    Extrae cuádruplos de la salida del runner
+    """
     lines = stdout.splitlines()
     quads = []
     started = False
@@ -15,7 +18,9 @@ def parse_quads(stdout: str):
                 started = True
             continue
         parts = [p.strip() for p in re.split(r"\s{2,}", line.strip())]
-        if len(parts) == 4:
+        if 1 <= len(parts) <= 4:
+            while len(parts) < 4:
+                parts.append("")
             quads.append(tuple(parts))
     return quads
 
@@ -30,6 +35,10 @@ def subseq_in_order(sequence, pattern):
     return all(any(x == y for x in it) for y in pattern)
 
 def run_driver(code: str):
+    """
+    Escribe a un archivo temporal .cps, ejecuta Driver.py en modo 'runner'
+    y devuelve return_code con la salida_combinada
+    """
     with tempfile.TemporaryDirectory() as td:
         td = pathlib.Path(td)
         src = td / "tmp.cps"
@@ -39,6 +48,8 @@ def run_driver(code: str):
             capture_output=True, text=True, cwd=HERE
         )
         return proc.returncode, (proc.stdout or "") + (proc.stderr or "")
+
+# ------------------ TEST CASES ------------------
 
 TESTS = [
     {
@@ -103,7 +114,7 @@ TESTS = [
         """),
         "check": lambda quads: (
             any(q[0] == "==" for q in quads) and
-            [q for q in quads if q[0] == "print"] and
+            any(q[0] == "print" for q in quads) and
             quads[-1][0] == "label"
         )
     },
@@ -119,9 +130,11 @@ TESTS = [
             }
         """),
         "check": lambda quads: (
-            subseq_in_order(ops(quads),
-                            ["=", "label", "<", "gotof", "+", "=", "==", "gotof", "goto",
-                             "==", "gotof", "goto", "print", "goto", "label"])
+            subseq_in_order(
+                ops(quads),
+                ["=", "label", "<", "gotof", "+", "=", "==", "gotof", "goto",
+                 "==", "gotof", "goto", "print", "goto", "label"]
+            )
         )
     },
 ]
@@ -136,7 +149,7 @@ def run_test(test: dict) -> dict:
         "passed": ok,
         "return_code": rc,
         "ops": ops(quads),
-        "output": out if not ok else "\\n".join(out.splitlines()[-10:])
+        "output": out if not ok else "\n".join(out.splitlines()[-10:])
     }
 
 def main():

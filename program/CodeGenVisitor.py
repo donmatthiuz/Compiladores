@@ -462,10 +462,15 @@ class CodeGenVisitor(CompiScriptVisitor):
 
     def visitForStatement(self, ctx):
         # init
+        assigns = ctx.assignment() if hasattr(ctx, "assignment") else None
+
         if ctx.variableDeclaration():
             self.visit(ctx.variableDeclaration())
-        elif ctx.assignment():
-            self.visit(ctx.assignment())
+        elif assigns:
+            if isinstance(assigns, list) and len(assigns) >= 1:
+                self.visit(assigns[0])
+            elif not isinstance(assigns, list):
+                self.visit(assigns)
 
         Lstart = self.table.new_label()
         Lcont = self.table.new_label()
@@ -486,8 +491,32 @@ class CodeGenVisitor(CompiScriptVisitor):
 
         # incremento
         self.table.add("label", None, None, Lcont)
-        if ctx.expression(1):
-            self.visit(ctx.expression(1))
+        inc_done = False
+        if assigns:
+            if isinstance(assigns, list):
+                if ctx.variableDeclaration():
+                    self.visit(assigns[-1])
+                    inc_done = True
+                else:
+                    if len(assigns) >= 2:
+                        self.visit(assigns[-1])
+                        inc_done = True
+            else:
+                if ctx.variableDeclaration():
+                    self.visit(assigns)
+                    inc_done = True
+
+        if not inc_done and ctx.expression(1):
+            expr2 = ctx.expression(1)
+            expr_text = expr2.getText()
+            val = self.visit(expr2)
+
+            if self._looks_like_simple_assignment(expr_text):
+                lhs = expr_text.split('=', 1)[0].strip()
+                if lhs:
+                    qlhs = self._find_variable_in_scopes(lhs)
+                    self.table.add("=", val, None, qlhs)
+
 
         self.table.add("goto", None, None, Lstart)
         self.table.add("label", None, None, Lend)
@@ -495,6 +524,14 @@ class CodeGenVisitor(CompiScriptVisitor):
         self.continue_stack.pop()
         self.break_stack.pop()
         return None
+
+    def _looks_like_simple_assignment(self, text: str) -> bool:
+        if not text:
+            return False
+        for bad in ("==", ">=", "<=", "!="):
+            if bad in text:
+                return False
+        return "=" in text
 
     def visitBreakStatement(self, ctx):
         target = self.break_stack[-1]
