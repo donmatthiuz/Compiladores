@@ -227,6 +227,93 @@ TESTS = [
     "check": lambda q: subseq_in_order(ops(q),
         ["label", "print", "goto", "label", "catch_param", "print", "label"])
 },
+
+
+# ------------------------------------------------------------
+# OFFSET
+# ------------------------------------------------------------
+{
+    "name": "offset_basic",
+    "code": textwrap.dedent("""\
+        let arr: integer[] = [10, 20, 30, 40];
+        let i: integer = 2;
+        let val: integer = arr[i];
+        print(val);
+    """),
+    "check": lambda q: subseq_in_order(ops(q),
+        ["newarr", "setelem", "setelem", "setelem", "setelem", "=", "offset", "getelem", "=", "print"])
+},
+
+
+# ------------------------------------------------------------
+# CLASES
+# ------------------------------------------------------------
+{
+    "name": "class_basic_with_method",
+    "code": textwrap.dedent("""\
+        class Persona {
+            let nombre: string = "Ana";
+            function saludar() {
+                print(this.nombre);
+            }
+        }
+    """),
+    "check": lambda q: subseq_in_order(ops(q),
+        ["class", "attr", "=", "func", "param", "print", "endfunc", "endclass"])
+},
+{
+    "name": "class_multiple_attrs_and_consts",
+    "code": textwrap.dedent("""\
+        class Punto {
+            let x: integer = 0;
+            let y: integer = 0;
+            const DIM: integer = 2;
+        }
+    """),
+    "check": lambda q: subseq_in_order(ops(q),
+        ["class", "attr", "=", "attr", "=", "attr", "=", "endclass"])
+},
+{
+    "name": "class_with_method_return",
+    "code": textwrap.dedent("""\
+        class Calculadora {
+            function sumar(a: integer, b: integer): integer {
+                return a + b;
+            }
+        }
+    """),
+    "check": lambda q: subseq_in_order(ops(q),
+        ["class", "func", "param", "param", "+", "return", "endfunc", "endclass"])
+},
+{
+    "name": "class_attribute_access_with_this",
+    "code": textwrap.dedent("""\
+        class C {
+            let n: integer = 5;
+            function inc() {
+                this.n = this.n + 1;
+            }
+        }
+    """),
+    "check": lambda q: subseq_in_order(ops(q),
+        ["class", "attr", "=", "func", "param", "getattr", "getattr", "+", "setelem", "endfunc", "endclass"])
+},
+
+{
+    "name": "class_instantiation_and_method_call",
+    "code": textwrap.dedent("""\
+        class Greeter {
+            function hello() {
+                print(1);
+            }
+        }
+        let g: Greeter = new Greeter();
+        g.hello();
+    """),
+    "check": lambda q: subseq_in_order(ops(q),
+        ["class", "func", "param", "print", "endfunc", "endclass",
+         "=", "call"])
+},
 ]
 
 def run_test(test: dict) -> dict:
@@ -257,19 +344,19 @@ def main():
     for r in results:
         mark = "✅" if r["passed"] else "❌"
         print(f"{mark} {r['name']}")
-        print("********** Código **********")
-        print(r['code'])
-        print("****************************")
-        print("============ Tabla reconstruida ============")
-        print(r["output"][:8000])
-        print("============================================")
-        # if not r["passed"]:
-        #     print("********** Código **********")
-        #     print(r['code'])
-        #     print("****************************")
-        #     print("============ Tabla reconstruida ============")
-        #     print(r["output"][:8000])
-        #     print("============================================")
+        # print("********** Código **********")
+        # print(r['code'])
+        # print("****************************")
+        # print("============ Tabla reconstruida ============")
+        # print(r["output"][:8000])
+        # print("============================================")
+        if not r["passed"]:
+            print("********** Código **********")
+            print(r['code'])
+            print("****************************")
+            print("============ Tabla reconstruida ============")
+            print(r["output"][:8000])
+            print("============================================")
     sys.exit(0 if passed == total else 1)
 
 if __name__ == "__main__":
