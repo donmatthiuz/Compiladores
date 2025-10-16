@@ -23,6 +23,8 @@ class CodeGenVisitor(CompiScriptVisitor):
         self.break_stack = []
         self.continue_stack = []
 
+        self._lhs_mode = False
+
     def _enter_scope(self):
         """Entra al siguiente scope hijo disponible"""
         parent_id = self.current_scope_node.id
@@ -125,8 +127,16 @@ class CodeGenVisitor(CompiScriptVisitor):
             lhs_ctx = ctx.getChild(0)
             rhs_ctx = ctx.getChild(2)
 
+            prev = self._lhs_mode
+            self._lhs_mode = True
             lhs_addr = self.visit(lhs_ctx)
+            self._lhs_mode = False
+
             rhs_val  = self.visit(rhs_ctx)
+
+            if isinstance(lhs_addr, dict) and lhs_addr.get("kind") == "index":
+                self.table.add("setelem", lhs_addr["base"], lhs_addr["index"], rhs_val)
+                return lhs_addr["base"]
 
             self.table.add("=", rhs_val, None, lhs_addr)
             return lhs_addr
@@ -253,22 +263,60 @@ class CodeGenVisitor(CompiScriptVisitor):
             return self.visit(ctx.expression())
         return None
 
+    # --- LITERALES
     def visitLiteralExpr(self, ctx):
+        # NUEVO: literal de arreglo
+        if hasattr(ctx, "arrayLiteral") and ctx.arrayLiteral():
+            return self.visit(ctx.arrayLiteral())
+
         if ctx.Literal():
             return ctx.Literal().getText()
         elif ctx.getText() in ["null", "true", "false"]:
             return ctx.getText()
         return ctx.getText()
 
+    # --- LISTAS
+    def visitArrayLiteral(self, ctx):
+        n = len(ctx.expression())
+        temp_arr = self.table.new_temp()
+        self.table.add("newarr", n, None, temp_arr)
+        for i in range(n):
+            val = self.visit(ctx.expression(i))
+            self.table.add("setelem", temp_arr, i, val)
+        return temp_arr
+
     def visitLeftHandSide(self, ctx):
+        """
+        Soporta:
+          - llamadas encadenadas base(...)
+          - indexación base[expr] (rvalue o lvalue)
+        """
         base = self.visit(ctx.primaryAtom())
-        
-        for suffix in ctx.suffixOp():
-            if suffix.getChildCount() > 0 and suffix.getChild(0).getText() == '(':
+        suffixes = list(ctx.suffixOp())
+
+        for idx, suffix in enumerate(suffixes):
+            first = suffix.getChild(0).getText()
+
+            # Llamada: base(...)
+            if first == '(':
                 base = self.visitCallExprWithBase(suffix, base)
-            else:
-                base = self.visit(suffix)
-        
+                continue
+
+            # Indexación: base[expr]
+            if first == '[':
+                index_val = self.visit(suffix.expression())
+
+                is_last_suffix = (idx == len(suffixes) - 1)
+                if self._lhs_mode and is_last_suffix:
+                    return {"kind": "index", "base": base, "index": index_val}
+                else:
+                    t = self.table.new_temp()
+                    self.table.add("getelem", base, index_val, t)
+                    base = t
+                continue
+
+            base = self.visit(suffix)
+
         return base
 
     def visitCallExprWithBase(self, ctx, func_name):

@@ -130,11 +130,44 @@ TESTS = [
             }
         """),
         "check": lambda quads: (
-            subseq_in_order(
-                ops(quads),
-                ["=", "label", "<", "gotof", "+", "=", "==", "gotof", "goto",
-                 "==", "gotof", "goto", "print", "goto", "label"]
-            )
+            subseq_in_order(ops(quads),
+                            ["=", "label", "<", "gotof", "+", "=", "==", "gotof", "goto",
+                             "==", "gotof", "goto", "print", "goto", "label"])
+        )
+    },
+    {
+        "name": "list_literal_get",
+        "code": textwrap.dedent("""\
+            let a: integer[] = [1, 2, 3];
+            print(a[1]);
+        """),
+        "check": lambda quads: (
+            subseq_in_order(ops(quads), ["newarr", "setelem", "setelem", "setelem", "=", "getelem", "print"])
+        )
+    },
+    {
+        "name": "list_index_set_and_get",
+        "code": textwrap.dedent("""\
+            let a: integer[] = [0, 0];
+            a[1] = 7;
+            print(a[1]);
+        """),
+        "check": lambda quads: (
+            subseq_in_order(ops(quads), ["newarr", "setelem", "setelem", "=", "setelem", "getelem", "print"])
+        )
+    },
+    {
+        "name": "nested_list_2d",
+        "code": textwrap.dedent("""\
+            let m: integer[][] = [[1,2],[3,4]];
+            print(m[1][0]);
+            m[0][1] = 9;
+            print(m[0][1]);
+        """),
+        "check": lambda quads: (
+            (ops(quads).count("newarr") >= 2) and
+            (ops(quads).count("setelem") >= 4) and
+            subseq_in_order(ops(quads), ["=", "getelem", "getelem", "print", "setelem", "getelem", "getelem", "print"])
         )
     },
 ]
