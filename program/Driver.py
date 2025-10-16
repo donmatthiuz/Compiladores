@@ -31,7 +31,6 @@ def main(argv):
     if mode == "runner":
         
         
-        print("=== Tabla reconstruida ===")
         print(visitor.linked_table.display())
 
         codegen = CodeGenVisitor(visitor.linked_table, visitor.symbol_table)

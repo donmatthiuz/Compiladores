@@ -24,6 +24,8 @@ class CodeGenVisitor(CompiScriptVisitor):
         self.continue_stack = []
 
         self._lhs_mode = False
+        self._last_index_access = None
+
 
     def _enter_scope(self):
         """Entra al siguiente scope hijo disponible"""
@@ -109,38 +111,123 @@ class CodeGenVisitor(CompiScriptVisitor):
 
     # --- Asignación: x = expr;
     def visitAssignment(self, ctx):
-        var = ctx.Identifier().getText()
-        
-        # Buscar en qué scope está definida la variable
-        qualified_var = self._find_variable_in_scopes(var)
+        """
+        Soporta:
+        - x = expr;
+        - a[i] = expr;
+        - m[0][1] = expr; (indexación encadenada)
+        """
+        self._last_index_access = None  # limpiar al empezar
+        rhs_node = None
+        if hasattr(ctx, "expression") and ctx.expression():
+            exs = ctx.expression()
+            if isinstance(exs, list) or hasattr(exs, "__len__"):
+                rhs_node = exs[-1]
+            else:
+                rhs_node = exs
+        rhs_val = self.visit(rhs_node) if rhs_node is not None else None
 
-        expr_node = ctx.expression()
-        if isinstance(expr_node, list):
-            expr_node = expr_node[0]
-
-        value = self.visit(expr_node)
-        self.table.add("=", value, None, qualified_var)
-        return qualified_var
-    
-    def visitAssignmentExpr(self, ctx):
-        if ctx.getChildCount() == 3 and ctx.getChild(1).getText() == '=':
-            lhs_ctx = ctx.getChild(0)
-            rhs_ctx = ctx.getChild(2)
-
+        if hasattr(ctx, "leftHandSide") and ctx.leftHandSide():
             prev = self._lhs_mode
             self._lhs_mode = True
-            lhs_addr = self.visit(lhs_ctx)
-            self._lhs_mode = False
-
-            rhs_val  = self.visit(rhs_ctx)
+            lhs_addr = self.visit(ctx.leftHandSide())
+            self._lhs_mode = prev
 
             if isinstance(lhs_addr, dict) and lhs_addr.get("kind") == "index":
                 self.table.add("setelem", lhs_addr["base"], lhs_addr["index"], rhs_val)
                 return lhs_addr["base"]
 
+            if isinstance(lhs_addr, str):
+                base, index = self._last_getelem_sources(lhs_addr)
+                if base is None:
+                    base, index = self._last_getelem_with_base(lhs_addr)
+                if base is None:
+                    base, index = self._last_getelem_any()
+                if base is not None:
+                    self.table.add("setelem", base, index, rhs_val)
+                    return base
+                self.table.add("=", rhs_val, None, lhs_addr)
+                return lhs_addr
+
             self.table.add("=", rhs_val, None, lhs_addr)
             return lhs_addr
-        return self.visitChildren(ctx)
+
+        if hasattr(ctx, "Identifier") and ctx.Identifier():
+            var = ctx.Identifier().getText()
+            qualified_var = self._find_variable_in_scopes(var)
+            self.table.add("=", rhs_val, None, qualified_var)
+            return qualified_var
+
+        if ctx.getChildCount() >= 1:
+            prev = self._lhs_mode
+            self._lhs_mode = True
+            lhs_addr = self.visit(ctx.getChild(0))
+            self._lhs_mode = prev
+
+            if isinstance(lhs_addr, dict) and lhs_addr.get("kind") == "index":
+                self.table.add("setelem", lhs_addr["base"], lhs_addr["index"], rhs_val)
+                return lhs_addr["base"]
+
+            if isinstance(lhs_addr, str):
+                base, index = self._last_getelem_sources(lhs_addr)
+                if base is None:
+                    base, index = self._last_getelem_with_base(lhs_addr)
+                if base is None:
+                    base, index = self._last_getelem_any()
+                if base is not None:
+                    self.table.add("setelem", base, index, rhs_val)
+                    return base
+                self.table.add("=", rhs_val, None, lhs_addr)
+                return lhs_addr
+        
+        return None
+
+    
+    def visitAssignmentExpr(self, ctx):
+        """
+        Maneja asignaciones generales, incluyendo LHS indexado:
+        a[i] = v;
+        m[x][y] = v;
+        """
+        txt = ctx.getText()
+        is_assign = ('=' in txt) and not any(op in txt for op in ('==', '!=', '<=', '>='))
+        if not is_assign:
+            return self.visitChildren(ctx)
+
+        rhs_ctx = ctx.getChild(ctx.getChildCount() - 1)
+        rhs_val = self.visit(rhs_ctx)
+
+        prev = self._lhs_mode
+        self._lhs_mode = True
+        lhs_ctx = ctx.getChild(0)
+        lhs_addr = self.visit(lhs_ctx)
+        self._lhs_mode = prev
+
+        # --- Emisión
+        if isinstance(lhs_addr, dict) and lhs_addr.get("kind") == "index":
+            self.table.add("setelem", lhs_addr["base"], lhs_addr["index"], rhs_val)
+            return lhs_addr["base"]
+
+        if isinstance(lhs_addr, str):
+            base, index = self._last_getelem_sources(lhs_addr)
+            if base is None:
+                base, index = self._last_getelem_with_base(lhs_addr)
+            if base is None:
+                base, index = self._last_getelem_any()
+            if base is not None:
+                self.table.add("setelem", base, index, rhs_val)
+                return base
+            self.table.add("=", rhs_val, None, lhs_addr)
+            return lhs_addr
+
+        base, index = self._last_getelem_any()
+        if base is not None:
+            self.table.add("setelem", base, index, rhs_val)
+            return base
+
+        self.table.add("=", rhs_val, None, lhs_addr)
+        return lhs_addr
+
 
     def _find_variable_in_scopes(self, var_name):
         """
@@ -265,7 +352,6 @@ class CodeGenVisitor(CompiScriptVisitor):
 
     # --- LITERALES
     def visitLiteralExpr(self, ctx):
-        # NUEVO: literal de arreglo
         if hasattr(ctx, "arrayLiteral") and ctx.arrayLiteral():
             return self.visit(ctx.arrayLiteral())
 
@@ -305,6 +391,9 @@ class CodeGenVisitor(CompiScriptVisitor):
             # Indexación: base[expr]
             if first == '[':
                 index_val = self.visit(suffix.expression())
+
+                # registra el último acceso indexado visto
+                self._last_index_access = (base, index_val)
 
                 is_last_suffix = (idx == len(suffixes) - 1)
                 if self._lhs_mode and is_last_suffix:
@@ -572,6 +661,83 @@ class CodeGenVisitor(CompiScriptVisitor):
         self.continue_stack.pop()
         self.break_stack.pop()
         return None
+
+
+    def _last_getelem_sources(self, temp_name):
+        for op, op1, op2, res in reversed(self.table.quadruples):
+            if res == temp_name and op == "getelem":
+                return op1, op2
+        return None, None
+
+    def _last_getelem_with_base(self, base_name):
+        for op, op1, op2, res in reversed(self.table.quadruples):
+            if op == "getelem" and op1 == base_name:
+                return op1, op2
+        return None, None
+
+    def _last_getelem_any(self):
+        for op, op1, op2, res in reversed(self.table.quadruples):
+            if op == "getelem":
+                return op1, op2
+        return None, None
+    
+    def _handle_index_assignment(self, ctx):
+        prev = self._lhs_mode
+        self._lhs_mode = True
+        lhs_node = None
+        if hasattr(ctx, "leftHandSide") and ctx.leftHandSide():
+            lhs_node = ctx.leftHandSide()
+        elif ctx.getChildCount() >= 1:
+            lhs_node = ctx.getChild(0)
+        lhs_addr = self.visit(lhs_node) if lhs_node is not None else None
+        self._lhs_mode = False
+
+        rhs_node = None
+        if hasattr(ctx, "expression") and ctx.expression():
+            ex = ctx.expression()
+            if isinstance(ex, list) or hasattr(ex, "__len__"):
+                rhs_node = ex[-1]
+            else:
+                rhs_node = ex
+        else:
+            if ctx.getChildCount() >= 3:
+                rhs_node = ctx.getChild(ctx.getChildCount() - 1)
+        rhs_val = self.visit(rhs_node) if rhs_node is not None else None
+
+        if isinstance(lhs_addr, dict) and lhs_addr.get("kind") == "index":
+            self.table.add("setelem", lhs_addr["base"], lhs_addr["index"], rhs_val)
+            return lhs_addr["base"]
+
+        if isinstance(lhs_addr, str):
+            base, index = self._last_getelem_sources(lhs_addr)
+            if base is None:
+                base, index = self._last_getelem_with_base(lhs_addr)
+            if base is None:
+                base, index = self._last_getelem_any()
+            if base is not None:
+                self.table.add("setelem", base, index, rhs_val)
+                return base
+            self.table.add("=", rhs_val, None, lhs_addr)
+            return lhs_addr
+
+        base, index = self._last_getelem_any()
+        if base is not None:
+            self.table.add("setelem", base, index, rhs_val)
+            return base
+
+        return None
+
+    def visitIndexAssignment(self, ctx):
+        return self._handle_index_assignment(ctx)
+
+    def visitIndexAssign(self, ctx):
+        return self._handle_index_assignment(ctx)
+
+    def visitArrayIndexAssignment(self, ctx):
+        return self._handle_index_assignment(ctx)
+
+    def visitArraySet(self, ctx):
+        return self._handle_index_assignment(ctx)
 
     def _looks_like_simple_assignment(self, text: str) -> bool:
         if not text:
