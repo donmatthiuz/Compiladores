@@ -247,6 +247,102 @@ class CodeGenVisitor(CompiScriptVisitor):
         # No encontrada (error semántico, pero aquí solo retornamos el nombre)
         return var_name
 
+
+    def visitClassDeclaration(self, ctx):
+        class_name = ctx.Identifier(0).getText()
+
+        # Marca inicio de clase en la tabla intermedia
+        self.table.add("class", None, None, class_name)
+
+        # Entrar al scope de la clase (usa tu navegación por hijos ya construida)
+        self._enter_scope()
+        try:
+            # Recorremos los miembros (variableDeclaration | constantDeclaration | functionDeclaration)
+            for member in ctx.classMember():
+                # --- Atributo (variable o const)
+                if hasattr(member, "variableDeclaration") and member.variableDeclaration():
+                    vctx = member.variableDeclaration()
+                    field_name = vctx.Identifier().getText()
+                    qualified = self._get_qualified_name(field_name)
+
+                    # Emitir registro de atributo (y si hay inicializador, emitir asignación)
+                    self.table.add("attr", None, None, qualified)
+
+                    # Si hay inicializador (ej: let nombre = "pepito";) lo evaluamos y asignamos
+                    if vctx.initializer():
+                        val = self.visit(vctx.initializer())
+                        self.table.add("=", val, None, qualified)
+
+                    # (Opcional) asegurar que el LinkedTable tenga el símbolo (si no lo puso el semántico)
+                    try:
+                        self.linked_table.add_symbol(field_name, None)
+                    except Exception:
+                        pass
+
+                elif hasattr(member, "constantDeclaration") and member.constantDeclaration():
+                    cctx = member.constantDeclaration()
+                    field_name = cctx.Identifier().getText()
+                    qualified = self._get_qualified_name(field_name)
+
+                    self.table.add("attr", None, None, qualified)
+                    val = self.visit(cctx.expression())
+                    self.table.add("=", val, None, qualified)
+
+                    try:
+                        self.linked_table.add_symbol(field_name, None)
+                    except Exception:
+                        pass
+
+                # --- Método / constructor
+                elif hasattr(member, "functionDeclaration") and member.functionDeclaration():
+                    fctx = member.functionDeclaration()
+                    method_name = fctx.Identifier().getText()
+
+                    # Nombre completo del método: Clase.metodo (ayuda a diferenciar)
+                    full_name = f"{class_name}.{method_name}"
+                    self.table.add("func", None, None, full_name)
+
+                    # Entrar al scope del método (debe coincidir con el orden de creación en LinkedTable)
+                    self._enter_scope()
+                    try:
+                        # Insertar 'this' como primer parámetro en el scope del método
+                        this_qualified = self._get_qualified_name("this")
+                        self.table.add("param", None, None, this_qualified)
+
+                        # Registrar parámetros del método
+                        if fctx.parameters():
+                            for param_ctx in fctx.parameters().parameter():
+                                pname = param_ctx.Identifier().getText()
+                                pqual = self._get_qualified_name(pname)
+                                self.table.add("param", None, None, pqual)
+
+                        # El bloque del método es un hijo (block) — entrar y procesar sus statements
+                        if fctx.block():
+                            self._enter_scope()
+                            try:
+                                for stmt in fctx.block().statement():
+                                    self.visit(stmt)
+                            finally:
+                                self._exit_scope()
+
+                        # Fin del método
+                        self.table.add("endfunc", None, None, full_name)
+
+                    finally:
+                        # Salir del scope del método
+                        self._exit_scope()
+
+                else:
+                    # cualquier otro caso (por seguridad)
+                    pass
+
+        finally:
+            # Salir del scope de la clase
+            self._exit_scope()
+            self.table.add("endclass", None, None, class_name)
+
+        return None
+
     # --- Print: print(expr);
     def visitPrintStatement(self, ctx):
         value = self.visit(ctx.expression())
@@ -421,8 +517,33 @@ class CodeGenVisitor(CompiScriptVisitor):
         return temp
 
     def visitIdentifierExpr(self, ctx):
+
         var_name = ctx.Identifier().getText()
-        return self._find_variable_in_scopes(var_name)
+
+        # Chequeo normal en scopes ascendentes
+        qname = self._find_variable_in_scopes(var_name)
+
+        # Si _find_variable_in_scopes devolvió el mismo nombre sin cualificar quiere decir que no lo encontró.
+        if qname == var_name:
+            # Buscar la clase envolvente (si existe) en la linked table
+            scope = self.current_scope_node
+            class_scope = None
+            while scope is not None:
+                if getattr(scope, "context_type", None) == "class":
+                    class_scope = scope
+                    break
+                scope = scope.parent
+
+            # Si hay scope de clase y el atributo está declarado ahí -> generar acceso a this.<attr>
+            if class_scope is not None and var_name in class_scope.symbols:
+                temp = self.table.new_temp()
+                # Emite un operador 'getattr' (usarás 'setattr' para asignar).
+                self.table.add("getattr", "this", var_name, temp)
+                return temp
+
+        # Sino, devolvemos la referencia resuelta (puede ser variable cualificada o global)
+        return qname
+
 
     def visitNewExpr(self, ctx):
         return f"new {ctx.Identifier().getText()}"

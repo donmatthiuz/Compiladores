@@ -453,10 +453,13 @@ class TypeCheckVisitor(CompiScriptVisitor):
         info = ClassInfo(class_name, base_name)
         self.classes[class_name] = info
 
+        self.current_scope.define(class_name, ClassType(class_name))
+        self.linked_table.add_symbol(class_name, ClassType(class_name))
+
         prev_class, prev_method, prev_ctor = self.current_class, self.in_method, self.in_constructor
         self.current_class, self.in_method, self.in_constructor = info, False, False
 
-        self.enter_scope()
+        self.enter_scope(context_type="class", context_name=class_name)
         try:
             # classMember: functionDeclaration | variableDeclaration | constantDeclaration
             for member in getattr(ctx, "classMember", lambda: [])():
@@ -478,6 +481,7 @@ class TypeCheckVisitor(CompiScriptVisitor):
 
                         raise TypeError(f"line {line}:{column} El atributo '{field_name}' en '{class_name}' debe tener tipo o valor inicial")
                     info.fields[field_name] = ftype
+                    self.linked_table.add_symbol(field_name, ftype)
 
                 elif hasattr(member, "constantDeclaration") and member.constantDeclaration():
                     cctx = member.constantDeclaration()
@@ -489,6 +493,7 @@ class TypeCheckVisitor(CompiScriptVisitor):
                         raise NameError(f"line {line}:{column} Atributo '{field_name}' ya declarado en clase '{class_name}'")
                     ftype = self.visit(cctx.expression())
                     info.fields[field_name] = ftype
+                    self.linked_table.add_symbol(field_name, ftype)
 
                 elif hasattr(member, "functionDeclaration") and member.functionDeclaration():
                     fctx = member.functionDeclaration()
@@ -508,10 +513,11 @@ class TypeCheckVisitor(CompiScriptVisitor):
 
                         self.in_constructor = True
                         self.function_depth += 1
-                        self.enter_scope()
+                        self.enter_scope(context_type="function", context_name="constructor")
                         try:
                             # 'this' en el scope
                             self.current_scope.define("this", ClassType(class_name))
+                            self.linked_table.add_symbol("this", ClassType(class_name))
 
                             # Duplicados en parámetros
                             seen = set()
@@ -522,6 +528,7 @@ class TypeCheckVisitor(CompiScriptVisitor):
                                         raise NameError(f"Parámetro duplicado '{pname}'")
                                     seen.add(pname)
                                     self.current_scope.define(pname, param_types[i])
+                                    self.linked_table.add_symbol(pname, param_types[i])
 
                             # retorno esperado en constructor: null/void
                             self._function_return_stack.append(NullType())
@@ -554,9 +561,10 @@ class TypeCheckVisitor(CompiScriptVisitor):
 
                         self.in_method = True
                         self.function_depth += 1
-                        self.enter_scope()
+                        self.enter_scope(context_type="function", context_name=fname)
                         try:
                             self.current_scope.define("this", ClassType(class_name))
+                            self.linked_table.add_symbol("this", ClassType(class_name))
 
                             # Duplicados en parámetros
                             seen = set()
@@ -567,6 +575,7 @@ class TypeCheckVisitor(CompiScriptVisitor):
                                         raise NameError(f"Parámetro duplicado '{pname}'")
                                     seen.add(pname)
                                     self.current_scope.define(pname, param_types[i])
+                                    self.linked_table.add_symbol(pname, param_types[i])
 
                             self._function_return_stack.append(ret_type)
                             try:
@@ -584,6 +593,9 @@ class TypeCheckVisitor(CompiScriptVisitor):
             self.exit_scope()
             self.current_class, self.in_method, self.in_constructor = prev_class, prev_method, prev_ctor
         return None
+    
+
+
 
     def visitNewExpr(self, ctx: CompiScriptParser.NewExprContext):
         class_name = ctx.Identifier().getText()

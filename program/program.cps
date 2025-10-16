@@ -1,5 +1,11 @@
-function saludar(nombre: string): string {
-  return "Hola " + nombre;
-}
+class Animal {
+  let nombre: string;
 
-let hola = saludar("fds");
+  function constructor(nombre: string) {
+    this.nombre = nombre;
+  }
+
+  function hablar(): string {
+    return this.nombre + " hace ruido.";
+  }
+}
