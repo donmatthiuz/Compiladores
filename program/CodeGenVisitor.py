@@ -111,13 +111,7 @@ class CodeGenVisitor(CompiScriptVisitor):
 
     # --- Asignación: x = expr;
     def visitAssignment(self, ctx):
-        """
-        Soporta:
-        - x = expr;
-        - a[i] = expr;
-        - m[0][1] = expr; (indexación encadenada)
-        """
-        self._last_index_access = None  # limpiar al empezar
+        self._last_index_access = None
         rhs_node = None
         if hasattr(ctx, "expression") and ctx.expression():
             exs = ctx.expression()
@@ -132,6 +126,14 @@ class CodeGenVisitor(CompiScriptVisitor):
             self._lhs_mode = True
             lhs_addr = self.visit(ctx.leftHandSide())
             self._lhs_mode = prev
+            
+            # 🔥 DEBUG - agrega esto temporalmente
+            print(f"DEBUG: lhs_addr = {lhs_addr}, rhs_val = {rhs_val}")
+            
+            # Asignación a atributo: this.nombre = valor
+            if isinstance(lhs_addr, dict) and lhs_addr.get("kind") == "attr":
+                self.table.add("setattr", lhs_addr["base"], lhs_addr["attr"], rhs_val)
+                return lhs_addr["base"]
 
             if isinstance(lhs_addr, dict) and lhs_addr.get("kind") == "index":
                 self.table.add("setelem", lhs_addr["base"], lhs_addr["index"], rhs_val)
@@ -151,44 +153,8 @@ class CodeGenVisitor(CompiScriptVisitor):
 
             self.table.add("=", rhs_val, None, lhs_addr)
             return lhs_addr
-
-        if hasattr(ctx, "Identifier") and ctx.Identifier():
-            var = ctx.Identifier().getText()
-            qualified_var = self._find_variable_in_scopes(var)
-            self.table.add("=", rhs_val, None, qualified_var)
-            return qualified_var
-
-        if ctx.getChildCount() >= 1:
-            prev = self._lhs_mode
-            self._lhs_mode = True
-            lhs_addr = self.visit(ctx.getChild(0))
-            self._lhs_mode = prev
-
-            if isinstance(lhs_addr, dict) and lhs_addr.get("kind") == "index":
-                self.table.add("setelem", lhs_addr["base"], lhs_addr["index"], rhs_val)
-                return lhs_addr["base"]
-
-            if isinstance(lhs_addr, str):
-                base, index = self._last_getelem_sources(lhs_addr)
-                if base is None:
-                    base, index = self._last_getelem_with_base(lhs_addr)
-                if base is None:
-                    base, index = self._last_getelem_any()
-                if base is not None:
-                    self.table.add("setelem", base, index, rhs_val)
-                    return base
-                self.table.add("=", rhs_val, None, lhs_addr)
-                return lhs_addr
         
-        return None
-
-    
     def visitAssignmentExpr(self, ctx):
-        """
-        Maneja asignaciones generales, incluyendo LHS indexado:
-        a[i] = v;
-        m[x][y] = v;
-        """
         txt = ctx.getText()
         is_assign = ('=' in txt) and not any(op in txt for op in ('==', '!=', '<=', '>='))
         if not is_assign:
@@ -203,7 +169,12 @@ class CodeGenVisitor(CompiScriptVisitor):
         lhs_addr = self.visit(lhs_ctx)
         self._lhs_mode = prev
 
-        # --- Emisión
+        # --- Emisión para atributos
+        if isinstance(lhs_addr, dict) and lhs_addr.get("kind") == "attr":
+            self.table.add("setattr", lhs_addr["base"], lhs_addr["attr"], rhs_val)
+            return lhs_addr["base"]
+
+        # --- Emisión para índices
         if isinstance(lhs_addr, dict) and lhs_addr.get("kind") == "index":
             self.table.add("setelem", lhs_addr["base"], lhs_addr["index"], rhs_val)
             return lhs_addr["base"]
@@ -228,7 +199,6 @@ class CodeGenVisitor(CompiScriptVisitor):
         self.table.add("=", rhs_val, None, lhs_addr)
         return lhs_addr
 
-
     def _find_variable_in_scopes(self, var_name):
         """
         Busca una variable en el scope actual y sus padres,
@@ -247,37 +217,32 @@ class CodeGenVisitor(CompiScriptVisitor):
         # No encontrada (error semántico, pero aquí solo retornamos el nombre)
         return var_name
 
-
     def visitClassDeclaration(self, ctx):
         class_name = ctx.Identifier(0).getText()
 
         # Marca inicio de clase en la tabla intermedia
         self.table.add("class", None, None, class_name)
 
-        # Entrar al scope de la clase (usa tu navegación por hijos ya construida)
+        # Entrar al scope de la clase
         self._enter_scope()
         try:
-            # Recorremos los miembros (variableDeclaration | constantDeclaration | functionDeclaration)
+            # Recorremos los miembros de la clase
             for member in ctx.classMember():
-                # --- Atributo (variable o const)
+
+                # --- Atributos (variable o constante)
                 if hasattr(member, "variableDeclaration") and member.variableDeclaration():
                     vctx = member.variableDeclaration()
                     field_name = vctx.Identifier().getText()
                     qualified = self._get_qualified_name(field_name)
 
-                    # Emitir registro de atributo (y si hay inicializador, emitir asignación)
                     self.table.add("attr", None, None, qualified)
 
-                    # Si hay inicializador (ej: let nombre = "pepito";) lo evaluamos y asignamos
                     if vctx.initializer():
                         val = self.visit(vctx.initializer())
                         self.table.add("=", val, None, qualified)
 
-                    # (Opcional) asegurar que el LinkedTable tenga el símbolo (si no lo puso el semántico)
-                    try:
-                        self.linked_table.add_symbol(field_name, None)
-                    except Exception:
-                        pass
+                    # Registrar en linked table
+                    self.current_scope_node.add_symbol(field_name, None)
 
                 elif hasattr(member, "constantDeclaration") and member.constantDeclaration():
                     cctx = member.constantDeclaration()
@@ -288,26 +253,22 @@ class CodeGenVisitor(CompiScriptVisitor):
                     val = self.visit(cctx.expression())
                     self.table.add("=", val, None, qualified)
 
-                    try:
-                        self.linked_table.add_symbol(field_name, None)
-                    except Exception:
-                        pass
+                    self.current_scope_node.add_symbol(field_name, None)
 
-                # --- Método / constructor
+                # --- Métodos
                 elif hasattr(member, "functionDeclaration") and member.functionDeclaration():
                     fctx = member.functionDeclaration()
                     method_name = fctx.Identifier().getText()
-
-                    # Nombre completo del método: Clase.metodo (ayuda a diferenciar)
                     full_name = f"{class_name}.{method_name}"
                     self.table.add("func", None, None, full_name)
 
-                    # Entrar al scope del método (debe coincidir con el orden de creación en LinkedTable)
+                    # Entrar al scope del método
                     self._enter_scope()
                     try:
-                        # Insertar 'this' como primer parámetro en el scope del método
+                        # Insertar 'this' como primer parámetro
                         this_qualified = self._get_qualified_name("this")
                         self.table.add("param", None, None, this_qualified)
+                        self.current_scope_node.add_symbol("this", class_name)
 
                         # Registrar parámetros del método
                         if fctx.parameters():
@@ -315,8 +276,9 @@ class CodeGenVisitor(CompiScriptVisitor):
                                 pname = param_ctx.Identifier().getText()
                                 pqual = self._get_qualified_name(pname)
                                 self.table.add("param", None, None, pqual)
+                                self.current_scope_node.add_symbol(pname, None)
 
-                        # El bloque del método es un hijo (block) — entrar y procesar sus statements
+                        # Bloque de la función (scope hijo)
                         if fctx.block():
                             self._enter_scope()
                             try:
@@ -325,24 +287,16 @@ class CodeGenVisitor(CompiScriptVisitor):
                             finally:
                                 self._exit_scope()
 
-                        # Fin del método
                         self.table.add("endfunc", None, None, full_name)
-
                     finally:
-                        # Salir del scope del método
                         self._exit_scope()
-
-                else:
-                    # cualquier otro caso (por seguridad)
-                    pass
-
         finally:
-            # Salir del scope de la clase
             self._exit_scope()
             self.table.add("endclass", None, None, class_name)
 
         return None
 
+    
     # --- Print: print(expr);
     def visitPrintStatement(self, ctx):
         value = self.visit(ctx.expression())
@@ -467,12 +421,25 @@ class CodeGenVisitor(CompiScriptVisitor):
             self.table.add("setelem", temp_arr, i, val)
         return temp_arr
 
+
+    def _resolve_this_attribute(self, attr_name):
+        """
+        Resuelve this.attr al nombre cualificado del atributo en el scope de clase
+        """
+        current = self.current_scope_node
+        
+        # Navegar hasta el scope de la clase
+        if current.context_type == "block":
+            current = current.parent
+        
+        if current.context_type == "function":
+            class_scope = current.parent
+            if class_scope and class_scope.context_type == "class":
+                # El atributo está en el scope de clase
+                return f"{attr_name}_{class_scope.id}"
+        
+        return None
     def visitLeftHandSide(self, ctx):
-        """
-        Soporta:
-          - llamadas encadenadas base(...)
-          - indexación base[expr] (rvalue o lvalue)
-        """
         base = self.visit(ctx.primaryAtom())
         suffixes = list(ctx.suffixOp())
 
@@ -487,8 +454,6 @@ class CodeGenVisitor(CompiScriptVisitor):
             # Indexación: base[expr]
             if first == '[':
                 index_val = self.visit(suffix.expression())
-
-                # registra el último acceso indexado visto
                 self._last_index_access = (base, index_val)
 
                 is_last_suffix = (idx == len(suffixes) - 1)
@@ -500,10 +465,35 @@ class CodeGenVisitor(CompiScriptVisitor):
                     base = t
                 continue
 
+            # Acceso a atributo: .identifier
+            if first == '.':
+                attr_name = suffix.Identifier().getText()
+                is_last_suffix = (idx == len(suffixes) - 1)
+                
+                # 🔥 Resolución estática de this.atributo
+                if base == "this":
+                    resolved = self._resolve_this_attribute(attr_name)
+                    if resolved:
+                        # Si es LHS y es el último suffix, retornar inmediatamente
+                        if self._lhs_mode and is_last_suffix:
+                            return resolved
+                        # Si no, continuar con el nombre resuelto
+                        base = resolved
+                        continue
+                
+                if self._lhs_mode and is_last_suffix:
+                    # En modo LHS, retornar info para setattr
+                    return {"kind": "attr", "base": base, "attr": attr_name}
+                else:
+                    # En modo rvalue, generar getattr
+                    temp = self.table.new_temp()
+                    self.table.add("getattr", base, attr_name, temp)
+                    base = temp
+                continue
+
             base = self.visit(suffix)
 
         return base
-
     def visitCallExprWithBase(self, ctx, func_name):
         args = []
         if ctx.arguments():
@@ -517,31 +507,9 @@ class CodeGenVisitor(CompiScriptVisitor):
         return temp
 
     def visitIdentifierExpr(self, ctx):
-
         var_name = ctx.Identifier().getText()
-
-        # Chequeo normal en scopes ascendentes
+        # Buscar en scopes ascendentes
         qname = self._find_variable_in_scopes(var_name)
-
-        # Si _find_variable_in_scopes devolvió el mismo nombre sin cualificar quiere decir que no lo encontró.
-        if qname == var_name:
-            # Buscar la clase envolvente (si existe) en la linked table
-            scope = self.current_scope_node
-            class_scope = None
-            while scope is not None:
-                if getattr(scope, "context_type", None) == "class":
-                    class_scope = scope
-                    break
-                scope = scope.parent
-
-            # Si hay scope de clase y el atributo está declarado ahí -> generar acceso a this.<attr>
-            if class_scope is not None and var_name in class_scope.symbols:
-                temp = self.table.new_temp()
-                # Emite un operador 'getattr' (usarás 'setattr' para asignar).
-                self.table.add("getattr", "this", var_name, temp)
-                return temp
-
-        # Sino, devolvemos la referencia resuelta (puede ser variable cualificada o global)
         return qname
 
 
