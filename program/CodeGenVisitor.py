@@ -217,6 +217,16 @@ class CodeGenVisitor(CompiScriptVisitor):
         # No encontrada (error semántico, pero aquí solo retornamos el nombre)
         return var_name
 
+    def _compute_offset(self, base, index):
+        """
+        Emite un cuádruplo para calcular el desplazamiento (offset)
+        de un elemento dentro de una estructura indexada.
+        """
+        temp_offset = self.table.new_temp()
+        self.table.add("offset", base, index, temp_offset)
+        return temp_offset
+
+
     def visitClassDeclaration(self, ctx):
         class_name = ctx.Identifier(0).getText()
 
@@ -461,7 +471,9 @@ class CodeGenVisitor(CompiScriptVisitor):
                     return {"kind": "index", "base": base, "index": index_val}
                 else:
                     t = self.table.new_temp()
-                    self.table.add("getelem", base, index_val, t)
+                    offset_temp = self._compute_offset(base, index_val)
+                    self.table.add("getelem", base, offset_temp, t)
+
                     base = t
                 continue
 
