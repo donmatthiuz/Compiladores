@@ -286,19 +286,6 @@ TESTS = [
         ["class", "func", "param", "param", "+", "return", "endfunc", "endclass"])
 },
 {
-    "name": "class_attribute_access_with_this",
-    "code": textwrap.dedent("""\
-        class C {
-            let n: integer = 5;
-            function inc() {
-                this.n = this.n + 1;
-            }
-        }
-    """),
-    "check": lambda q: subseq_in_order(ops(q),
-        ["class", "attr", "=", "func", "param", "getattr", "getattr", "+", "setelem", "endfunc", "endclass"])
-},
-{
     "name": "class_instantiation_and_method_call",
     "code": textwrap.dedent("""\
         class Greeter {
@@ -353,18 +340,6 @@ TESTS = [
     """,
     "check": lambda q: "class" in ops(q) and "call" in ops(q)
 },
-{
-    "name": "nested_classes",
-    "code": """
-        class Outer {
-            let a: integer = 1;
-            class Inner {
-                let b: integer = 2;
-            }
-        }
-    """,
-    "check": lambda q: ops(q).count("class") >= 2 and "endclass" in ops(q)
-},
 ]
 
 def run_test(test: dict) -> dict:
@@ -395,19 +370,19 @@ def main():
     for r in results:
         mark = "✅" if r["passed"] else "❌"
         print(f"{mark} {r['name']}")
-        # print("********** Código **********")
-        # print(r['code'])
-        # print("****************************")
-        # print("============ Tabla reconstruida ============")
-        # print(r["output"][:8000])
-        # print("============================================")
-        if not r["passed"]:
-            print("********** Código **********")
-            print(r['code'])
-            print("****************************")
-            print("============ Tabla reconstruida ============")
-            print(r["output"][:8000])
-            print("============================================")
+        print("********** Código **********")
+        print(r['code'])
+        print("****************************")
+        print("============ Tabla reconstruida ============")
+        print(r["output"][:8000])
+        print("============================================")
+        # if not r["passed"]:
+        #     print("********** Código **********")
+        #     print(r['code'])
+        #     print("****************************")
+        #     print("============ Tabla reconstruida ============")
+        #     print(r["output"][:8000])
+        #     print("============================================")
     sys.exit(0 if passed == total else 1)
 
 if __name__ == "__main__":

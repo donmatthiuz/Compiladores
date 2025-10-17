@@ -105,8 +105,8 @@ class TypeCheckVisitor(CompiScriptVisitor):
             # Variable sin inicialización ni tipo explícito - por defecto null
             var_type = NullType()
 
-        self.current_scope.define(var_name, var_type)
-        self.linked_table.add_symbol(var_name, var_type) 
+        sym = self.current_scope.define(var_name, var_type)
+        self.linked_table.add_symbol(var_name, var_type, offset=sym.offset)
         return var_type
 
     def visitConstantDeclaration(self, ctx: CompiScriptParser.ConstantDeclarationContext):
@@ -122,8 +122,8 @@ class TypeCheckVisitor(CompiScriptVisitor):
         const_type = self.visit(ctx.expression())
         
         # Agregar a la tabla de símbolos
-        self.current_scope.define(const_name, const_type)
-        self.linked_table.add_symbol(const_name, const_type) 
+        sym = self.current_scope.define(const_name, const_type)
+        self.linked_table.add_symbol(const_name, const_type, offset=sym.offset)
         return const_type
 
     def visitInitializer(self, ctx: CompiScriptParser.InitializerContext):
@@ -463,7 +463,7 @@ class TypeCheckVisitor(CompiScriptVisitor):
         try:
             # classMember: functionDeclaration | variableDeclaration | constantDeclaration
             for member in getattr(ctx, "classMember", lambda: [])():
-                if hasattr(member, "variableDeclaration") and member.variableDeclaration():
+                if hasattr(member, "variableDeclaration") and member.variableDeclaration():                    
                     vctx = member.variableDeclaration()
                     field_name = vctx.Identifier().getText()
                     if field_name in info.fields:
@@ -481,9 +481,11 @@ class TypeCheckVisitor(CompiScriptVisitor):
 
                         raise TypeError(f"line {line}:{column} El atributo '{field_name}' en '{class_name}' debe tener tipo o valor inicial")
                     info.fields[field_name] = ftype
-                    self.linked_table.add_symbol(field_name, ftype)
+                    fsym = self.current_scope.define(field_name, ftype)
+                    self.linked_table.add_symbol(field_name, ftype, offset=fsym.offset)
 
-                elif hasattr(member, "constantDeclaration") and member.constantDeclaration():
+
+                elif hasattr(member, "constantDeclaration") and member.constantDeclaration():                    
                     cctx = member.constantDeclaration()
                     field_name = cctx.Identifier().getText()
                     if field_name in info.fields:
@@ -493,7 +495,8 @@ class TypeCheckVisitor(CompiScriptVisitor):
                         raise NameError(f"line {line}:{column} Atributo '{field_name}' ya declarado en clase '{class_name}'")
                     ftype = self.visit(cctx.expression())
                     info.fields[field_name] = ftype
-                    self.linked_table.add_symbol(field_name, ftype)
+                    csym = self.current_scope.define(field_name, ftype)
+                    self.linked_table.add_symbol(field_name, ftype, offset=csym.offset)
 
                 elif hasattr(member, "functionDeclaration") and member.functionDeclaration():
                     fctx = member.functionDeclaration()
@@ -516,8 +519,9 @@ class TypeCheckVisitor(CompiScriptVisitor):
                         self.enter_scope(context_type="function", context_name="constructor")
                         try:
                             # 'this' en el scope
-                            self.current_scope.define("this", ClassType(class_name))
-                            self.linked_table.add_symbol("this", ClassType(class_name))
+                            sym = self.current_scope.define(var_name, var_type)
+                            self.linked_table.add_symbol(var_name, var_type, offset=sym.offset)
+   
 
                             # Duplicados en parámetros
                             seen = set()
