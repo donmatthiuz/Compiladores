@@ -1,3 +1,11 @@
-let y = 6;
-let z = 6;
-let b = x + c;
+class Animal {
+  let nombre: string;
+
+  function constructor(nombre: string) {
+    this.nombre = nombre;
+  }
+
+  function hablar(): string {
+    return this.nombre + " hace ruido.";
+  }
+}

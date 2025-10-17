@@ -1,0 +1,13 @@
+Operador   Op1        Op2        Resultado 
+class                            Animal    
+attr                             nombre_1  
+func                             Animal.constructor
+param                            this_2    
+param                            nombre_2  
+endfunc                          Animal.constructor
+func                             Animal.hablar
+param                            this_4    
++          nombre_1   " hace ruido." t1        
+return     t1                              
+endfunc                          Animal.hablar
+endclass                         Animal    

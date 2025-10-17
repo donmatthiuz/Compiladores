@@ -54,7 +54,7 @@ RUN pip install -r requirements.txt --break-system-packages
 # -----------------------------
 # Generar parser con ANTLR
 # -----------------------------
-RUN antlr -Dlanguage=Python3 -visitor CompiScript.g4
+RUN java -jar /usr/local/lib/antlr-4.13.1-complete.jar -Dlanguage=Python3 -visitor /program/CompiScript.g4
 
 
 # -----------------------------

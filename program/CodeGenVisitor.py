@@ -112,48 +112,51 @@ class CodeGenVisitor(CompiScriptVisitor):
     # --- Asignación: x = expr;
     def visitAssignment(self, ctx):
         self._last_index_access = None
-        rhs_node = None
-        if hasattr(ctx, "expression") and ctx.expression():
-            exs = ctx.expression()
-            if isinstance(exs, list) or hasattr(exs, "__len__"):
-                rhs_node = exs[-1]
-            else:
-                rhs_node = exs
-        rhs_val = self.visit(rhs_node) if rhs_node is not None else None
-
-        if hasattr(ctx, "leftHandSide") and ctx.leftHandSide():
+        
+        # Verificar si tiene un '.' en los hijos
+        has_dot = False
+        for i in range(ctx.getChildCount()):
+            if ctx.getChild(i).getText() == '.':
+                has_dot = True
+                break
+        
+        if has_dot:
+            # Property assignment: expression '.' Identifier '=' expression ';'
+            
+            # Primer hijo es la expression (this)
+            lhs_expr = ctx.expression(0)  # this
             prev = self._lhs_mode
             self._lhs_mode = True
-            lhs_addr = self.visit(ctx.leftHandSide())
+            base = self.visit(lhs_expr)
             self._lhs_mode = prev
             
-            # 🔥 DEBUG - agrega esto temporalmente
-            print(f"DEBUG: lhs_addr = {lhs_addr}, rhs_val = {rhs_val}")
+            # Después del '.' viene el Identifier
+            attr_name = ctx.Identifier().getText()  # nombre
             
-            # Asignación a atributo: this.nombre = valor
-            if isinstance(lhs_addr, dict) and lhs_addr.get("kind") == "attr":
-                self.table.add("setattr", lhs_addr["base"], lhs_addr["attr"], rhs_val)
-                return lhs_addr["base"]
-
-            if isinstance(lhs_addr, dict) and lhs_addr.get("kind") == "index":
-                self.table.add("setelem", lhs_addr["base"], lhs_addr["index"], rhs_val)
-                return lhs_addr["base"]
-
-            if isinstance(lhs_addr, str):
-                base, index = self._last_getelem_sources(lhs_addr)
-                if base is None:
-                    base, index = self._last_getelem_with_base(lhs_addr)
-                if base is None:
-                    base, index = self._last_getelem_any()
-                if base is not None:
-                    self.table.add("setelem", base, index, rhs_val)
+            # Después del '=' viene la segunda expression
+            rhs_val = self.visit(ctx.expression(1))  # nombre_2
+            
+            
+            if isinstance(base, str) and base.startswith("this"):
+                resolved_attr = self._resolve_this_attribute(attr_name)
+                if resolved_attr:
+                    self.table.add("setattr", base, resolved_attr, rhs_val)
                     return base
-                self.table.add("=", rhs_val, None, lhs_addr)
-                return lhs_addr
+            
 
-            self.table.add("=", rhs_val, None, lhs_addr)
-            return lhs_addr
+            self.table.add("setattr", base, attr_name, rhs_val)
+            return base
+
         
+        else:
+            # Simple assignment: Identifier '=' expression ';'
+            var_name = ctx.Identifier().getText()
+            qualified_var = self._find_variable_in_scopes(var_name)
+            rhs_val = self.visit(ctx.expression(0))
+            
+            self.table.add("=", rhs_val, None, qualified_var)
+            return qualified_var   
+    
     def visitAssignmentExpr(self, ctx):
         txt = ctx.getText()
         is_assign = ('=' in txt) and not any(op in txt for op in ('==', '!=', '<=', '>='))
@@ -434,21 +437,46 @@ class CodeGenVisitor(CompiScriptVisitor):
 
     def _resolve_this_attribute(self, attr_name):
         """
-        Resuelve this.attr al nombre cualificado del atributo en el scope de clase
+        Resuelve this.attr al nombre cualificado del atributo en el scope de clase.
+        Navega desde el scope actual hasta encontrar el scope de clase.
         """
         current = self.current_scope_node
         
-        # Navegar hasta el scope de la clase
-        if current.context_type == "block":
+        
+        # Navegar hacia arriba hasta encontrar el scope de clase
+        while current is not None:
+            
+            if current.context_type == "class":
+                # Encontramos el scope de clase, buscar el atributo
+                if attr_name in current.symbols:
+                    resolved = f"{attr_name}_{current.id}"
+                    return resolved
+                else:
+                    continue
+                break
             current = current.parent
         
-        if current.context_type == "function":
-            class_scope = current.parent
-            if class_scope and class_scope.context_type == "class":
-                # El atributo está en el scope de clase
-                return f"{attr_name}_{class_scope.id}"
+        return None
+    
+    
+    def _get_object_type(self, obj_var):
+        if not isinstance(obj_var, str):
+            return None
+        
+        # Extraer nombre base
+        base_name = obj_var.split('_')[0] if '_' in obj_var else obj_var
+        
+        # Buscar en scopes
+        current = self.current_scope_node
+        while current is not None:
+            if obj_var in current.symbols:
+                return current.symbols[obj_var]
+            elif base_name in current.symbols:
+                return current.symbols[base_name]
+            current = current.parent
         
         return None
+    
     def visitLeftHandSide(self, ctx):
         base = self.visit(ctx.primaryAtom())
         suffixes = list(ctx.suffixOp())
@@ -458,6 +486,20 @@ class CodeGenVisitor(CompiScriptVisitor):
 
             # Llamada: base(...)
             if first == '(':
+                # 🔥 NUEVO: Verificar si el suffix anterior fue un acceso a método
+                if idx > 0:
+                    prev_suffix = suffixes[idx - 1]
+                    if prev_suffix.getChild(0).getText() == '.':
+                        # Es una llamada a método: objeto.metodo()
+                        method_name = prev_suffix.Identifier().getText()
+                        
+                        # Obtener el tipo del objeto base (antes del método)
+                        # Necesitamos el base ANTES de procesar el '.'
+                        # Para esto, debemos reconstruir o guardar el base anterior
+                        
+                        # Solución: detectar y manejar llamadas a método de forma especial
+                        pass
+                
                 base = self.visitCallExprWithBase(suffix, base)
                 continue
 
@@ -473,7 +515,6 @@ class CodeGenVisitor(CompiScriptVisitor):
                     t = self.table.new_temp()
                     offset_temp = self._compute_offset(base, index_val)
                     self.table.add("getelem", base, offset_temp, t)
-
                     base = t
                 continue
 
@@ -482,32 +523,141 @@ class CodeGenVisitor(CompiScriptVisitor):
                 attr_name = suffix.Identifier().getText()
                 is_last_suffix = (idx == len(suffixes) - 1)
                 
-                # 🔥 Resolución estática de this.atributo
-                if base == "this":
+                # 🔥 CRÍTICO: Verificar si el SIGUIENTE suffix es una llamada
+                is_method_call = False
+                if idx + 1 < len(suffixes):
+                    next_suffix = suffixes[idx + 1]
+                    if next_suffix.getChild(0).getText() == '(':
+                        is_method_call = True
+                
+                if is_method_call:
+                    # Es una llamada a método, no generar getattr
+                    # Solo construir el nombre completo del método
+                    obj_type = self._get_object_type(base)
+                    if obj_type:
+                        base = f"{obj_type}.{attr_name}"
+                    else:
+                        base = attr_name
+                    continue
+                
+                # Manejar this.atributo
+                if isinstance(base, str) and base.startswith("this"):
                     resolved = self._resolve_this_attribute(attr_name)
                     if resolved:
-                        # Si es LHS y es el último suffix, retornar inmediatamente
                         if self._lhs_mode and is_last_suffix:
                             return resolved
-                        # Si no, continuar con el nombre resuelto
-                        base = resolved
+                        temp = self.table.new_temp()
+                        self.table.add("getattr", base, resolved, temp)
+                        base = temp
                         continue
                 
+                # Para cualquier otro objeto (acceso a atributo, NO método)
+                resolved_attr = self._resolve_attribute_from_object(base, attr_name)
+                
                 if self._lhs_mode and is_last_suffix:
-                    # En modo LHS, retornar info para setattr
-                    return {"kind": "attr", "base": base, "attr": attr_name}
+                    return {"kind": "attr", "base": base, "attr": resolved_attr or attr_name}
                 else:
-                    # En modo rvalue, generar getattr
                     temp = self.table.new_temp()
-                    self.table.add("getattr", base, attr_name, temp)
+                    self.table.add("getattr", base, resolved_attr or attr_name, temp)
                     base = temp
                 continue
-
+                
             base = self.visit(suffix)
 
         return base
+    
+    def _resolve_attribute_from_object(self, obj_var, attr_name):
+        """
+        Resuelve el nombre cualificado de un atributo basándose en el tipo del objeto.
+        """
+        # 1. Buscar el tipo de la variable en los scopes
+        obj_type = None
+        current = self.current_scope_node
+        
+        # Extraer nombre base (sin cualificación)
+        base_name = obj_var.split('_')[0] if '_' in obj_var else obj_var
+        
+        while current is not None:
+            # Probar primero con el nombre exacto (puede ser cualificado)
+            if obj_var in current.symbols:
+                obj_type = current.symbols[obj_var]
+                break
+            # Probar con el nombre base (sin cualificar)
+            elif base_name in current.symbols:
+                obj_type = current.symbols[base_name]
+                break
+            current = current.parent
+        
+        # 2. Si encontramos el tipo, buscar el atributo en la clase
+        if obj_type:
+            # Buscar el scope de la clase en los hijos del root
+            for child in self.linked_table.root.children:
+                if child.context_type == "class" and child.context_name == obj_type:
+                    # Encontramos el scope de la clase
+                    if attr_name in child.symbols:
+                        # Retornar nombre cualificado del atributo
+                        return f"{attr_name}_{child.id}"
+        
+        # 3. Fallback: si no se pudo resolver, retornar None
+        return None
+    
+    def _resolve_attribute_for_any_object(self, obj_name, attr_name):
+
+        # Buscar el tipo del objeto en los símbolos
+        current = self.current_scope_node
+        while current is not None:
+            if obj_name in current.symbols:
+                class_type = current.symbols[obj_name]
+                # Buscar la clase en el scope global
+                if class_type and self.linked_table.root.symbols.get(class_type):
+                    # Buscar el scope de la clase
+                    for child in self.linked_table.root.children:
+                        if child.context_type == "class" and child.context_name == class_type:
+                            if attr_name in child.symbols:
+                                return f"{attr_name}_{child.id}"
+                break
+            current = current.parent
+        
+        return None
+    def visitNewExpr(self, ctx):
+        class_name = ctx.Identifier().getText()
+        
+        temp_obj = self.table.new_temp()
+        self.table.add("new", class_name, None, temp_obj)
+        
+
+        if ctx.arguments():
+            # Pasar el objeto como primer argumento (this)
+            self.table.add("arg", temp_obj, None, None)
+            
+            # Pasar los demás argumentos
+            for expr_ctx in ctx.arguments().expression():
+                arg_val = self.visit(expr_ctx)
+                self.table.add("arg", arg_val, None, None)
+            
+            # Llamar al constructor
+            constructor_name = f"{class_name}.constructor"
+            self.table.add("call", constructor_name, len(ctx.arguments().expression()) + 1, None)
+        
+        return temp_obj
+    
     def visitCallExprWithBase(self, ctx, func_name):
+        """
+        Maneja llamadas a funciones/métodos.
+        func_name puede ser:
+        - Un nombre simple: "foo"
+        - Un nombre de método completo: "Animal.hablar"
+        - Un nombre de método con objeto: guardado en self._pending_method_call
+        """
         args = []
+        
+        # Si func_name es un método completo (ej: "Animal.hablar")
+        # necesitamos pasar el objeto como primer argumento
+        if '.' in func_name and not func_name.startswith('this'):
+            # Es una llamada a método de un objeto, pero necesitamos el objeto
+            # Este caso se maneja desde visitLeftHandSide con contexto adicional
+            pass
+        
         if ctx.arguments():
             for expr_ctx in ctx.arguments().expression():
                 arg_val = self.visit(expr_ctx)
@@ -517,7 +667,8 @@ class CodeGenVisitor(CompiScriptVisitor):
         temp = self.table.new_temp()
         self.table.add("call", func_name, len(args), temp)
         return temp
-
+    
+    
     def visitIdentifierExpr(self, ctx):
         var_name = ctx.Identifier().getText()
         # Buscar en scopes ascendentes
@@ -526,10 +677,32 @@ class CodeGenVisitor(CompiScriptVisitor):
 
 
     def visitNewExpr(self, ctx):
-        return f"new {ctx.Identifier().getText()}"
+        class_name = ctx.Identifier().getText()
+        
+        # Crear nueva instancia
+        temp_obj = self.table.new_temp()
+        self.table.add("new", class_name, None, temp_obj)
+        
+        # Si hay argumentos, llamar al constructor
+        if ctx.arguments():
+            # Pasar el objeto como primer argumento (this)
+            self.table.add("arg", temp_obj, None, None)
+            
+            # Pasar los demás argumentos
+            for expr_ctx in ctx.arguments().expression():
+                arg_val = self.visit(expr_ctx)
+                self.table.add("arg", arg_val, None, None)
+            
+            # Llamar al constructor
+            constructor_name = f"{class_name}.constructor"
+            num_args = len(ctx.arguments().expression()) + 1  # +1 por this
+            self.table.add("call", constructor_name, num_args, None)
+        
+        return temp_obj
 
     def visitThisExpr(self, ctx):
-        return "this"
+        # Buscar "this" en los scopes actuales
+        return self._find_variable_in_scopes("this")
 
     def visitChildren(self, node):
         return super().visitChildren(node)

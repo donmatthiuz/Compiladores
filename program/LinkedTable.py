@@ -18,7 +18,6 @@ class LinkedScope:
     def display(self, level=0):
         indent = "  " * level
         
-        # 🔥 Mostrar contexto
         if self.context_name:
             header = f"{indent}Scope {self.id} [{self.context_type}: {self.context_name}]:\n"
         else:
