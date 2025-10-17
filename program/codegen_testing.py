@@ -298,7 +298,6 @@ TESTS = [
     "check": lambda q: subseq_in_order(ops(q),
         ["class", "attr", "=", "func", "param", "getattr", "getattr", "+", "setelem", "endfunc", "endclass"])
 },
-
 {
     "name": "class_instantiation_and_method_call",
     "code": textwrap.dedent("""\
@@ -313,6 +312,58 @@ TESTS = [
     "check": lambda q: subseq_in_order(ops(q),
         ["class", "func", "param", "print", "endfunc", "endclass",
          "=", "call"])
+},
+{
+    "name": "class_basic",
+    "code": """
+        class A {
+            let x: integer = 1;
+        }
+    """,
+    "check": lambda q: subseq_in_order(ops(q), ["class","attr","=","endclass"])
+},
+{
+    "name": "class_with_method_and_this_access",
+    "code": """
+        class C {
+            let n: integer = 5;
+            function inc() {
+                this.n = this.n + 1;
+            }
+        }
+    """,
+    "check": lambda q: "getattr" in ops(q) and ("+" in ops(q) or "setelem" in ops(q))
+},
+{
+    "name": "class_with_multiple_methods",
+    "code": """
+        class Math {
+            function sum(a: integer, b: integer): integer { return a + b; }
+            function mul(a: integer, b: integer): integer { return a * b; }
+        }
+    """,
+    "check": lambda q: ops(q).count("func") == 2 and ops(q).count("endfunc") == 2
+},
+{
+    "name": "function_return_class_instance",
+    "code": """
+        class P {}
+        function make(): P { return new P(); }
+        let p: P = make();
+    """,
+    "check": lambda q: "class" in ops(q) and "call" in ops(q)
+},
+{
+    "name": "nested_classes",
+    "code": """
+        class Outer {
+            let a: integer = 1;
+            class Inner {
+                let b: integer = 2;
+            }
+        }
+    """,
+    "check": lambda q: ops(q).count("class") >= 2 and "endclass" in ops(q)
 },
 ]
 
