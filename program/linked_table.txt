@@ -1,0 +1,13 @@
+Scope#0<global> parent=None
+  Animal: Animal
+  Scope#1<class Animal> parent=0
+    nombre: string @off=0
+    Scope#2<function constructor> parent=1
+      this: Animal
+      nombre: string
+      Scope#3<block> parent=2
+        (vacío)
+    Scope#4<function hablar> parent=1
+      this: Animal
+      Scope#5<block> parent=4
+        (vacío)

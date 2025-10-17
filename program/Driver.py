@@ -29,13 +29,10 @@ def main(argv):
 
     # Solo si es runner, generar código
     if mode == "runner":
-        
-        
-        print(visitor.linked_table.display())
-
+        visitor.linked_table.save_to_file()
         codegen = CodeGenVisitor(visitor.linked_table, visitor.symbol_table)
         codegen.visit(tree)
-        codegen.table.display()  # o cualquier acción que quieras ejecutar
+        codegen.table.save_to_txt()
     else:
         # debug: solo type check
         print("Debug mode: type checking completed successfully")

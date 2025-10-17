@@ -4,10 +4,12 @@ attr                             nombre_1
 func                             Animal.constructor
 param                            this_2    
 param                            nombre_2  
+setattr    this_2     nombre_1   nombre_2  
 endfunc                          Animal.constructor
 func                             Animal.hablar
 param                            this_4    
-+          nombre_1   " hace ruido." t1        
-return     t1                              
+getattr    this_4     nombre_1   t1        
++          t1         " hace ruido." t2        
+return     t2                              
 endfunc                          Animal.hablar
 endclass                         Animal    

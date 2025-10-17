@@ -5,7 +5,5 @@ class Animal {
     this.nombre = nombre;
   }
 
-  function hablar(): string {
-    return this.nombre + " hace ruido.";
-  }
+ 
 }

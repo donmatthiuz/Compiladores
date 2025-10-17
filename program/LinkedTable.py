@@ -147,3 +147,12 @@ class LinkedTable:
     # --------------------------
     def display(self):
         return self.root.display()
+    
+    def save_to_file(self, filename="linked_table.txt"):
+
+        try:
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(self.display())
+            print(f"✅ Tabla enlazada guardada en: {filename}")
+        except Exception as e:
+            print(f"⚠️ Error al guardar la tabla enlazada: {e}")

@@ -519,8 +519,8 @@ class TypeCheckVisitor(CompiScriptVisitor):
                         self.enter_scope(context_type="function", context_name="constructor")
                         try:
                             # 'this' en el scope
-                            sym = self.current_scope.define(var_name, var_type)
-                            self.linked_table.add_symbol(var_name, var_type, offset=sym.offset)
+                            self.current_scope.define("this", ClassType(class_name))
+                            self.linked_table.add_symbol("this", ClassType(class_name))
    
 
                             # Duplicados en parámetros
