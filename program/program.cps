@@ -1,12 +1,6 @@
-class Animal {
-  let nombre: string;
-
-  function constructor(nombre: string) {
-    this.nombre = nombre;
-  }
-
-  function hablar(): string {
-    return this.nombre + " hace ruido.";
-  }
-}
-
+function sum(a: integer, b: integer): integer {
+            let c: integer = a + b;
+            return c;
+        }
+let r: integer = sum(3, 4);
+print(r);

@@ -1,15 +1,25 @@
 Operador   Op1        Op2        Resultado 
-class                            Animal    
-attr                             nombre_1  
-func                             Animal.constructor
-param                            this_2    
-param                            nombre_2  
-setattr    this_2     nombre_1   nombre_2  
-endfunc                          Animal.constructor
-func                             Animal.hablar
-param                            this_4    
-getattr    this_4     nombre_1   t1        
-+          t1         " hace ruido." t2        
-return     t2                              
-endfunc                          Animal.hablar
-endclass                         Animal    
+newarr     2                     t1        
+newarr     2                     t2        
+setelem    t2                    1         
+setelem    t2         1          2         
+setelem    t1                    t2        
+newarr     2                     t3        
+setelem    t3                    3         
+setelem    t3         1          4         
+setelem    t1         1          t3        
+=          t1                    m         
+offset     m          1          t5        
+getelem    m          t5         t4        
+offset     t4         0          t7        
+getelem    t4         t7         t6        
+print      t6                              
+offset     m          0          t9        
+getelem    m          t9         t8        
+offset     t8         1          t11       
+getelem    t8         t11        t10       
+offset     m          0          t13       
+getelem    m          t13        t12       
+offset     t12        1          t15       
+getelem    t12        t15        t14       
+print      t14                             
