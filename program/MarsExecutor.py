@@ -153,42 +153,42 @@ class MarsExecutor:
                 os.remove(tmp_filename)
 
 
-# Ejemplo de uso
-if __name__ == "__main__":
-    executor = MarsExecutor()
+# # Ejemplo de uso
+# if __name__ == "__main__":
+#     executor = MarsExecutor()
     
-    # Código MIPS de ejemplo: imprime "Hello World"
-    mips_code = """
-.data
-    hello: .asciiz "Hello, World!\\n"
+#     # Código MIPS de ejemplo: imprime "Hello World"
+#     mips_code = """
+# .data
+#     hello: .asciiz "Hello, World!\\n"
 
-.text
-.globl main
-main:
-    # Print string
-    li $v0, 4        # syscall 4: print string
-    la $a0, hello    # load address of string
-    syscall
+# .text
+# .globl main
+# main:
+#     # Print string
+#     li $v0, 4        # syscall 4: print string
+#     la $a0, hello    # load address of string
+#     syscall
     
-    # Exit
-    li $v0, 10       # syscall 10: exit
-    syscall
-"""
+#     # Exit
+#     li $v0, 10       # syscall 10: exit
+#     syscall
+# """
     
-    print("Ejecutando código MIPS...")
-    stdout, stderr, returncode = executor.execute_mips(mips_code)
+#     print("Ejecutando código MIPS...")
+#     stdout, stderr, returncode = executor.execute_mips(mips_code)
     
-    print(f"\n=== Salida ===")
-    print(stdout)
+#     print(f"\n=== Salida ===")
+#     print(stdout)
     
-    if stderr:
-        print(f"\n=== Errores ===")
-        print(stderr)
+#     if stderr:
+#         print(f"\n=== Errores ===")
+#         print(stderr)
     
-    print(f"\nCódigo de retorno: {returncode}")
+#     print(f"\nCódigo de retorno: {returncode}")
     
-    # Ejemplo de verificación de sintaxis
-    print("\n" + "="*50)
-    print("Verificando sintaxis...")
-    success, message = executor.assemble_only(mips_code)
-    print(f"Resultado: {message}")
+#     # Ejemplo de verificación de sintaxis
+#     print("\n" + "="*50)
+#     print("Verificando sintaxis...")
+#     success, message = executor.assemble_only(mips_code)
+#     print(f"Resultado: {message}")
