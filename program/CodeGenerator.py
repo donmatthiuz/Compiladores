@@ -131,7 +131,6 @@ class CodeGenerator:
         for quad in self.quads:
             self._translate_quadruple(quad)
         
-        # Epilogo: restaurar stack y terminar programa
         self.text_section.append("")
         self.text_section.append(f"    addi $sp, $sp, {stack_size}  # Restaurar stack")
         self.text_section.append("    li $v0, 10  # Syscall exit")
@@ -146,6 +145,8 @@ class CodeGenerator:
         Traduce un cuádruplo individual a código MIPS.
         """
         operator, op1, op2, result = quad
+        op_str = str(operator) if operator is not None else ""
+        op_lower = op_str.lower()
         
         # Asignación simple: result = op1
         if operator == "=":
@@ -234,28 +235,48 @@ class CodeGenerator:
             self._store_result(result, rd)
         
         # Instrucciones de control de flujo
-        elif operator == "label":
-            label = str(result).rstrip(":")
+        elif op_lower == "label":
+            # Formatos soportados:
+            #   ("label", None, None, "L1")
+            #   ("LABEL", "L1", None, None)
+            label_name = result if result not in (None, "") else op1
+            label = str(label_name).rstrip(":")
             self.text_section.append(f"{label}:")
         
-        elif operator == "goto":
+        elif op_lower == "goto":
+            # Formatos soportados:
+            #   ("goto", "L1", None, None)
+            #   ("GOTO", None, None, "L1")
             label = op1 or result
             self.text_section.append(f"    j {label}  # Salto incondicional")
         
-        elif operator == "if":
-            # Formato: (if, condición, goto, label)
+        # Saltar si la condición es verdadera
+        # Formatos:
+        #   ("if",    cond, None, "L1")
+        #   ("IF",    cond, None, "L1")
+        #   ("ifTrue",cond, None, "L1")
+        #   ("GOTOT", cond, None, "L1")
+        elif op_lower in ("if", "iftrue", "gotot"):
             cond_reg = self._load_operand(op1)
-            label = result
-            self.text_section.append(f"    bne {cond_reg}, $zero, {label}  # Si {op1} != 0, saltar a {label}")
+            label = result if result not in (None, "") else op2
+            self.text_section.append(
+                f"    bne {cond_reg}, $zero, {label}  # if {op1} != 0 goto {label}"
+            )
         
-        elif operator == "ifFalse":
-            # Saltar si la condición es falsa
+        # Saltar si la condición es falsa
+        # Formatos:
+        #   ("ifFalse", cond, None, "L1")
+        #   ("IF_FALSE",cond, None, "L1")
+        #   ("GOTOF",   cond, None, "L1")
+        elif op_lower in ("iffalse", "if_false", "gotof"):
             cond_reg = self._load_operand(op1)
-            label = result
-            self.text_section.append(f"    beq {cond_reg}, $zero, {label}  # Si {op1} == 0, saltar a {label}")
+            label = result if result not in (None, "") else op2
+            self.text_section.append(
+                f"    beq {cond_reg}, $zero, {label}  # if {op1} == 0 goto {label}"
+            )
         
-        # Operación de impresión (PRINT o print)
-        elif operator == "PRINT" or operator == "print":
+        # Operación de impresión
+        elif op_lower == "print":
             # El operando a imprimir puede estar en op1 o en result
             operand_to_print = result if result else op1
             reg = self._load_operand(operand_to_print)
