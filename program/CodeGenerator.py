@@ -251,11 +251,7 @@ class CodeGenerator:
             self.text_section.append(f"    j {label}  # Salto incondicional")
         
         # Saltar si la condición es verdadera
-        # Formatos:
-        #   ("if",    cond, None, "L1")
-        #   ("IF",    cond, None, "L1")
-        #   ("ifTrue",cond, None, "L1")
-        #   ("GOTOT", cond, None, "L1")
+        #   ("if",    cond, None, "L1")  /  ("GOTOT", cond, None, "L1"), etc.
         elif op_lower in ("if", "iftrue", "gotot"):
             cond_reg = self._load_operand(op1)
             label = result if result not in (None, "") else op2
@@ -264,16 +260,30 @@ class CodeGenerator:
             )
         
         # Saltar si la condición es falsa
-        # Formatos:
-        #   ("ifFalse", cond, None, "L1")
-        #   ("IF_FALSE",cond, None, "L1")
-        #   ("GOTOF",   cond, None, "L1")
+        #   ("ifFalse", cond, None, "L1") / ("GOTOF", cond, None, "L1"), etc.
         elif op_lower in ("iffalse", "if_false", "gotof"):
             cond_reg = self._load_operand(op1)
             label = result if result not in (None, "") else op2
             self.text_section.append(
                 f"    beq {cond_reg}, $zero, {label}  # if {op1} == 0 goto {label}"
             )
+
+        # ------------------
+        # TRY / CATCH
+        # ------------------
+        elif op_lower == "catch_param":
+            # Formato: ('catch_param', nombre_excepcion, None, None)
+            # No tenemos un objeto excepción real: solo inicializamos la variable a 0.
+            if op1:
+                reg = self._get_register(f"var_{op1}")
+                self.text_section.append(
+                    f"    li {reg}, 0  # Inicializar variable de catch '{op1}' a 0"
+                )
+                self._store_result(op1, reg)
+
+        elif op_lower in ("try", "catch", "endtry", "end_try"):
+            # Marcas de control para el generador de cuádruplos, sin código MIPS directo.
+            self.text_section.append(f"    # {operator} (no genera código MIPS directo)")
         
         # Operación de impresión
         elif op_lower == "print":
@@ -332,9 +342,8 @@ if __name__ == "__main__":
     quad_table.add("+", "t4", "t3", "t5")     # t5 = t4 + t3  (5 + 6 = 11)
     quad_table.add("PRINT", None, None, "t5") # print(t5)
     
-    # Generar código MIPS
     print("🔧 Generando código MIPS...")
-    codegen = CodeGenerator(quad_table)  # ¡SIN symbol_table!
+    codegen = CodeGenerator(quad_table)
     mips_code = codegen.get_mips_code()
     
     print("\n📝 Código MIPS generado:")
@@ -342,7 +351,6 @@ if __name__ == "__main__":
     print(mips_code)
     print("=" * 60)
     
-    # Ejecutar con MARS
     print("\n🚀 Ejecutando en MARS...")
     try:
         executor = MarsExecutor()

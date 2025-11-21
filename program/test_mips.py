@@ -10,6 +10,9 @@ KNOWN_OPS = {
     "goto", "GOTO",
     "gotof", "GOTOF",
     "label", "LABEL",
+    "catch_param", "CATCH_PARAM",
+    "try", "TRY",
+    "catch", "CATCH",
 }
 
 def extract_quads_from_text(text: str):
@@ -198,6 +201,26 @@ TESTS = [
     "check": lambda q: all(
         op in ops_lower(q)
         for op in ["=", "label", "<", "gotof", "+", "goto"]
+    )
+},
+
+# ------------------------------------------------------------
+# TRY / CATCH
+# ------------------------------------------------------------
+{
+    "name": "try_catch_basic",
+    "code": textwrap.dedent("""\
+        try {
+            print(1);
+        } catch (e) {
+            print(2);
+        }
+    """),
+    "check": lambda q: (
+        "catch_param" in ops_lower(q) and
+        ops_lower(q).count("label") >= 2 and
+        "goto" in ops_lower(q) and
+        ops_lower(q).count("print") >= 2
     )
 },
 
