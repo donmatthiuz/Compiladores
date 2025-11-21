@@ -10,9 +10,28 @@ KNOWN_OPS = {
     "goto", "GOTO",
     "gotof", "GOTOF",
     "label", "LABEL",
+    # try/catch
     "catch_param", "CATCH_PARAM",
     "try", "TRY",
     "catch", "CATCH",
+    # listas / arreglos
+    "newarr", "NEWARR",
+    "setelem", "SETELEM",
+    "getelem", "GETELEM",
+    "offset", "OFFSET",
+    # clases / objetos
+    "class", "CLASS",
+    "endclass", "ENDCLASS",
+    "attr", "ATTR",
+    "getattr", "GETATTR",
+    "setattr", "SETATTR",
+    # funciones
+    "func", "FUNC",
+    "endfunc", "ENDFUNC",
+    "param", "PARAM",
+    "arg", "ARG",
+    "call", "CALL",
+    "return", "RETURN",
 }
 
 def extract_quads_from_text(text: str):
@@ -221,6 +240,110 @@ TESTS = [
         ops_lower(q).count("label") >= 2 and
         "goto" in ops_lower(q) and
         ops_lower(q).count("print") >= 2
+    )
+},
+
+# ------------------------------------------------------------
+# LISTAS / ARREGLOS
+# ------------------------------------------------------------
+{
+    "name": "list_literal_get",
+    "code": textwrap.dedent("""\
+        let a: integer[] = [1, 2, 3];
+        print(a[1]);
+    """),
+    "check": lambda q: (
+        "newarr" in ops_lower(q) and
+        ops_lower(q).count("setelem") >= 3 and
+        "getelem" in ops_lower(q) and
+        "print" in ops_lower(q)
+    )
+},
+
+{
+    "name": "list_index_set_and_get",
+    "code": textwrap.dedent("""\
+        let a: integer[] = [0, 0];
+        a[1] = 7;
+        print(a[1]);
+    """),
+    "check": lambda q: (
+        "newarr" in ops_lower(q) and
+        ops_lower(q).count("setelem") >= 3 and
+        "getelem" in ops_lower(q) and
+        "print" in ops_lower(q)
+    )
+},
+
+{
+    "name": "offset_basic",
+    "code": textwrap.dedent("""\
+        let arr: integer[] = [10, 20, 30, 40];
+        let i: integer = 2;
+        let val: integer = arr[i];
+        print(val);
+    """),
+    "check": lambda q: (
+        "newarr" in ops_lower(q) and
+        ops_lower(q).count("setelem") >= 4 and
+        "offset" in ops_lower(q) and
+        "getelem" in ops_lower(q) and
+        "print" in ops_lower(q)
+    )
+},
+
+# ------------------------------------------------------------
+# CLASES / OBJETOS
+# ------------------------------------------------------------
+{
+    "name": "class_basic",
+    "code": textwrap.dedent("""\
+        class A {
+            let x: integer = 1;
+        }
+    """),
+    "check": lambda q: all(
+        op in ops_lower(q) for op in ["class", "attr", "=", "endclass"]
+    )
+},
+
+{
+    "name": "class_basic_with_method",
+    "code": textwrap.dedent("""\
+        class Persona {
+            let nombre: string = "Ana";
+            function saludar() {
+                print(this.nombre);
+            }
+        }
+    """),
+    "check": lambda q: (
+        "class" in ops_lower(q) and
+        "attr" in ops_lower(q) and
+        "func" in ops_lower(q) and
+        "print" in ops_lower(q) and
+        "endfunc" in ops_lower(q) and
+        "endclass" in ops_lower(q)
+    )
+},
+
+{
+    "name": "class_instantiation_and_method_call",
+    "code": textwrap.dedent("""\
+        class Greeter {
+            function hello() {
+                print(1);
+            }
+        }
+        let g: Greeter = new Greeter();
+        g.hello();
+    """),
+    "check": lambda q: (
+        "class" in ops_lower(q) and
+        "func" in ops_lower(q) and
+        "endfunc" in ops_lower(q) and
+        "endclass" in ops_lower(q) and
+        "call" in ops_lower(q)
     )
 },
 

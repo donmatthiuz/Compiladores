@@ -148,7 +148,9 @@ class CodeGenerator:
         op_str = str(operator) if operator is not None else ""
         op_lower = op_str.lower()
         
-        # Asignación simple: result = op1
+        # -------------------------------------------------------
+        # ASIGNACIÓN
+        # -------------------------------------------------------
         if operator == "=":
             src_reg = self._load_operand(op1)
             if src_reg:
@@ -157,7 +159,9 @@ class CodeGenerator:
                     self.text_section.append(f"    move {dest_reg}, {src_reg}  # {result} = {op1}")
                 self._store_result(result, dest_reg)
         
-        # Operaciones aritméticas: +, -, *, /
+        # -------------------------------------------------------
+        # ARITMÉTICA: +, -, *, /
+        # -------------------------------------------------------
         elif operator == "+":
             r1 = self._load_operand(op1)
             r2 = self._load_operand(op2)
@@ -187,7 +191,9 @@ class CodeGenerator:
             self.text_section.append(f"    mflo {rd}  # Obtener cociente en {result}")
             self._store_result(result, rd)
         
-        # Operaciones relacionales: <, >, <=, >=, ==, !=
+        # -------------------------------------------------------
+        # RELACIONALES: <, >, <=, >=, ==, !=
+        # -------------------------------------------------------
         elif operator == "<":
             r1 = self._load_operand(op1)
             r2 = self._load_operand(op2)
@@ -234,19 +240,17 @@ class CodeGenerator:
             self.text_section.append(f"    sltu {rd}, $zero, {rd}  # {result} = ({op1} != {op2})")
             self._store_result(result, rd)
         
-        # Instrucciones de control de flujo
+        # -------------------------------------------------------
+        # CONTROL DE FLUJO (labels, gotos, if/ifFalse)
+        # -------------------------------------------------------
         elif op_lower == "label":
-            # Formatos soportados:
-            #   ("label", None, None, "L1")
-            #   ("LABEL", "L1", None, None)
+            # ("label", None, None, "L1") ó ("LABEL", "L1", None, None)
             label_name = result if result not in (None, "") else op1
             label = str(label_name).rstrip(":")
             self.text_section.append(f"{label}:")
         
         elif op_lower == "goto":
-            # Formatos soportados:
-            #   ("goto", "L1", None, None)
-            #   ("GOTO", None, None, "L1")
+            # ("goto", "L1", None, None) ó ("GOTO", None, None, "L1")
             label = op1 or result
             self.text_section.append(f"    j {label}  # Salto incondicional")
         
@@ -268,12 +272,11 @@ class CodeGenerator:
                 f"    beq {cond_reg}, $zero, {label}  # if {op1} == 0 goto {label}"
             )
 
-        # ------------------
+        # -------------------------------------------------------
         # TRY / CATCH
-        # ------------------
+        # -------------------------------------------------------
         elif op_lower == "catch_param":
-            # Formato: ('catch_param', nombre_excepcion, None, None)
-            # No tenemos un objeto excepción real: solo inicializamos la variable a 0.
+            # ('catch_param', nombre_excepcion, None, None)
             if op1:
                 reg = self._get_register(f"var_{op1}")
                 self.text_section.append(
@@ -282,10 +285,67 @@ class CodeGenerator:
                 self._store_result(op1, reg)
 
         elif op_lower in ("try", "catch", "endtry", "end_try"):
-            # Marcas de control para el generador de cuádruplos, sin código MIPS directo.
+            # Solo marcadores de control para los cuádruplos
             self.text_section.append(f"    # {operator} (no genera código MIPS directo)")
         
-        # Operación de impresión
+        # -------------------------------------------------------
+        # LISTAS / ARREGLOS
+        # -------------------------------------------------------
+        elif op_lower == "newarr":
+            # Formato: ('newarr', tamaño, tipo, resultado)
+            self.text_section.append(
+                f"    # newarr {op1}, {op2} -> {result} (no-op en MIPS por ahora)"
+            )
+        
+        elif op_lower == "setelem":
+            # Algo como: ('setelem', arreglo, índice/offset, valor)
+            self.text_section.append(
+                f"    # setelem {op1}, {op2}, {result} (no-op en MIPS por ahora)"
+            )
+        
+        elif op_lower == "getelem":
+            # Algo como: ('getelem', arreglo, índice/offset, resultado)
+            self.text_section.append(
+                f"    # getelem {op1}, {op2} -> {result} (no-op en MIPS por ahora)"
+            )
+        
+        elif op_lower == "offset":
+            # Típico en traducción de arreglos: offset base, index, temp
+            self.text_section.append(
+                f"    # offset {op1}, {op2} -> {result} (no-op en MIPS por ahora)"
+            )
+        
+        # -------------------------------------------------------
+        # OBJETOS / CLASES (soporte mínimo, no-op)
+        # -------------------------------------------------------
+        elif op_lower == "class":
+            # ('class', None, None, nombre_clase)
+            self.text_section.append(f"    # class {result} (inicio definición de clase)")
+        
+        elif op_lower == "endclass":
+            self.text_section.append(f"    # endclass (fin definición de clase)")
+        
+        elif op_lower == "attr":
+            # Definición de atributo de clase
+            self.text_section.append(
+                f"    # attr {op1} -> {result} (atributo de clase, sin código MIPS directo)"
+            )
+        
+        elif op_lower == "getattr":
+            # Acceso a atributo: obj.attr -> result
+            self.text_section.append(
+                f"    # getattr {op1}.{op2} -> {result} (no-op en MIPS por ahora)"
+            )
+        
+        elif op_lower == "setattr":
+            # Escritura de atributo: obj.attr = valor
+            self.text_section.append(
+                f"    # setattr {op1}.{op2} = {result} (no-op en MIPS por ahora)"
+            )
+
+        # -------------------------------------------------------
+        # PRINT
+        # -------------------------------------------------------
         elif op_lower == "print":
             # El operando a imprimir puede estar en op1 o en result
             operand_to_print = result if result else op1
