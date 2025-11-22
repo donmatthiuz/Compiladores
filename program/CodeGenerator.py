@@ -425,19 +425,62 @@ class CodeGenerator:
                     else:
                         self.text_section.append(f"    move {dest_reg}, {src_reg}  # {result} = {op1}")
         
-        # ==================== ARITMÉTICA ====================
+       
         elif operator == "+":
             r1, t1 = self._load_operand(op1)
             r2, t2 = self._load_operand(op2)
             
-            is_float = t1 == "float" or t2 == "float"
-            rd = self._get_register(result, is_float=is_float)
+            # Concatenación de strings
+            if t1 == "string" or t2 == "string":
+                self.text_section.append(f"    # Concatenación de strings: {result} = {op1} + {op2}")
+                
+                # Reservar espacio en heap para el resultado
+                result_addr = self.heap_pointer
+                self.heap_pointer += 256  # 256 bytes para el string concatenado
+                
+                rd = self._get_register(result)
+                
+                # Guardar registros r1 y r2 si son necesarios
+                self.text_section.append(f"    move $s0, {r1}  # guardar ptr string 1")
+                self.text_section.append(f"    move $s1, {r2}  # guardar ptr string 2")
+                self.text_section.append(f"    li {rd}, {result_addr}  # dirección destino")
+                
+                # Copiar primer string
+                self.text_section.append(f"    move $t8, {rd}  # ptr destino")
+                self.text_section.append(f"    move $t7, $s0  # ptr source 1")
+                self.text_section.append(f"{self.current_function}_strcpy1_{self.label_counter}:")
+                self.text_section.append(f"    lb $t6, 0($t7)")
+                self.text_section.append(f"    beq $t6, $zero, {self.current_function}_strcpy2_{self.label_counter}")
+                self.text_section.append(f"    sb $t6, 0($t8)")
+                self.text_section.append(f"    addi $t7, $t7, 1")
+                self.text_section.append(f"    addi $t8, $t8, 1")
+                self.text_section.append(f"    j {self.current_function}_strcpy1_{self.label_counter}")
+                
+                # Copiar segundo string
+                self.text_section.append(f"{self.current_function}_strcpy2_{self.label_counter}:")
+                self.text_section.append(f"    move $t7, $s1  # ptr source 2")
+                self.text_section.append(f"{self.current_function}_strcpy2_loop_{self.label_counter}:")
+                self.text_section.append(f"    lb $t6, 0($t7)")
+                self.text_section.append(f"    sb $t6, 0($t8)")
+                self.text_section.append(f"    beq $t6, $zero, {self.current_function}_strcat_end_{self.label_counter}")
+                self.text_section.append(f"    addi $t7, $t7, 1")
+                self.text_section.append(f"    addi $t8, $t8, 1")
+                self.text_section.append(f"    j {self.current_function}_strcpy2_loop_{self.label_counter}")
+                self.text_section.append(f"{self.current_function}_strcat_end_{self.label_counter}:")
+                
+                self.label_counter += 1
             
-            if is_float:
+            # Suma de floats
+            elif t1 == "float" or t2 == "float":
+                is_float = True
+                rd = self._get_register(result, is_float=is_float)
                 self.text_section.append(f"    add.s {rd}, {r1}, {r2}  # {result} = {op1} + {op2}")
+            
+            # Suma de enteros
             else:
+                rd = self._get_register(result)
                 self.text_section.append(f"    add {rd}, {r1}, {r2}  # {result} = {op1} + {op2}")
-        
+                
         elif operator == "-":
             r1, t1 = self._load_operand(op1)
             r2, t2 = self._load_operand(op2)
