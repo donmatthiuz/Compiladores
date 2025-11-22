@@ -1,2 +1,4 @@
 Scope#0<global> parent=None
-  m: integer[][] @off=0
+  arr: integer[] @off=0
+  i: integer @off=4
+  val: integer @off=8

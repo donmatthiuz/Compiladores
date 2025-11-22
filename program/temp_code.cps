@@ -1,4 +1,4 @@
-let m: integer[][] = [[1,2],[3,4]];
-print(m[1][0]);
-m[0][1] = 9;
-print(m[0][1]);
+let arr: integer[] = [10, 20, 30, 40];
+let i: integer = 2;
+let val: integer = arr[i];
+print(val);

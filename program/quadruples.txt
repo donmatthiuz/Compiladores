@@ -1,25 +1,12 @@
 Operador   Op1        Op2        Resultado 
-newarr     2                     t1        
-newarr     2                     t2        
-setelem    t2                    1         
-setelem    t2         1          2         
-setelem    t1                    t2        
-newarr     2                     t3        
-setelem    t3                    3         
-setelem    t3         1          4         
-setelem    t1         1          t3        
-=          t1                    m         
-offset     m          1          t5        
-getelem    m          t5         t4        
-offset     t4         0          t7        
-getelem    t4         t7         t6        
-print      t6                              
-offset     m          0          t9        
-getelem    m          t9         t8        
-offset     t8         1          t11       
-getelem    t8         t11        t10       
-offset     m          0          t13       
-getelem    m          t13        t12       
-offset     t12        1          t15       
-getelem    t12        t15        t14       
-print      t14                             
+newarr     4                     t1        
+setelem    t1                    10        
+setelem    t1         1          20        
+setelem    t1         2          30        
+setelem    t1         3          40        
+=          t1                    arr       
+=          2                     i         
+offset     arr        i          t3        
+getelem    arr        t3         t2        
+=          t2                    val       
+print      val                             

@@ -1,0 +1,38 @@
+.data
+newline: .asciiz "\n"
+
+.text
+.globl main
+
+main:
+    # newarr: Crear array de tamaño 4
+    li $t0, 268500992  # Dirección base del array
+    li $t1, 10
+    # setelem: t1[0] = 10
+    sw $t1, 0($t0)
+    li $t2, 20
+    # setelem: t1[1] = 20
+    sw $t2, 4($t0)
+    li $t3, 30
+    # setelem: t1[2] = 30
+    sw $t3, 8($t0)
+    li $t4, 40
+    # setelem: t1[3] = 40
+    sw $t4, 12($t0)
+    move $t5, $t0  # arr = t1
+    li $t6, 2
+    move $t7, $t6  # i = 2
+    # offset: Calcular arr[i]
+    sll $t8, $t7, 2  # Multiplicar índice por 4
+    add $t8, $t5, $t8  # Sumar base + offset
+    # getelem: Cargar elemento del array
+    lw $t9, 0($t8)
+    move $t0, $t9  # val = t2
+    move $a0, $t0
+    li $v0, 1  # Print integer
+    syscall
+    li $v0, 4  # Print newline
+    la $a0, newline
+    syscall
+    li $v0, 10
+    syscall

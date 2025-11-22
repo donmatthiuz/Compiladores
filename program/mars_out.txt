@@ -1,0 +1,16 @@
+=== LOG ENTRY ===
+
+            Return code: 0
+
+            --- STDOUT ---
+
+            30
+
+
+
+            --- STDERR ---
+
+            
+
+            ================
+            

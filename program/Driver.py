@@ -6,6 +6,7 @@ from type_check_visitor import TypeCheckVisitor
 from CodeGenVisitor import CodeGenVisitor
 from CodeGenerator import CodeGenerator
 from MarsExecutor import MarsExecutor
+from utils_ import guadar
 def main(argv):
     if len(argv) < 2:
         print("Uso: python Driver.py <archivo.cps> [debug|runner]")
@@ -41,6 +42,16 @@ def main(argv):
         
         executor = MarsExecutor()
         stdout, stderr, returncode = executor.execute_mips(mips_code)
+        
+        guadar("mips_code.txt",mips_code)
+        guadar("mars_out.txt", f"""=== LOG ENTRY ===\n
+            Return code: {returncode}\n
+            --- STDOUT ---\n
+            {stdout}\n
+            --- STDERR ---\n
+            {stderr}\n
+            ================
+            """)
         print("\n📤 Salida del programa:")
         print(stdout if stdout else "(sin salida)")
             
