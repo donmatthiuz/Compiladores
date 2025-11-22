@@ -32,12 +32,15 @@ def main(argv):
 
     # Solo si es runner, generar código
     if mode == "runner":
+        linked = visitor.linked_table
         visitor.linked_table.save_to_file()
+        table_linked = visitor.linked_table
         codegen = CodeGenVisitor(visitor.linked_table, visitor.symbol_table)
         codegen.visit(tree)
         
         quadruple_table = codegen.table
-        codegencodigo = CodeGenerator(quadruple_table) 
+        
+        codegencodigo = CodeGenerator(quadruple_table,linked ) 
         mips_code = codegencodigo.get_mips_code()
         
         executor = MarsExecutor()
