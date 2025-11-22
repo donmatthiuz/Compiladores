@@ -1,4 +1,10 @@
-let arr: integer[] = [10, 20, 30, 40];
-let i: integer = 2;
-let val: integer = arr[i];
-print(val);
+function SumaRecursiva(n: integer): integer {
+    if (n <= 0) {
+        return 0;
+    } else {
+        return n + SumaRecursiva(n - 1);
+    }
+}
+
+var res = SumaRecursiva(8);
+print(res);  // Esto imprimirá 36 (1+2+3+...+8)

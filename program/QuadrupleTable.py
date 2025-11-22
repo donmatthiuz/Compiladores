@@ -31,4 +31,4 @@ class QuadrupleTable:
             for quad in self.quadruples:
                 op, op1, op2, res = [q or "" for q in quad]
                 f.write(f"{op:<10} {op1:<10} {op2:<10} {res:<10}\n")
-        print(f"✅ Tabla de cuádruplos guardada en {filename}")
+        

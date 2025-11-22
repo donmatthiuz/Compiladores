@@ -1,4 +1,11 @@
 Scope#0<global> parent=None
-  arr: integer[] @off=0
-  i: integer @off=4
-  val: integer @off=8
+  SumaRecursiva: function(integer): integer
+  res: integer @off=4
+  Scope#1<function SumaRecursiva> parent=0
+    n: integer
+    Scope#2<block> parent=1
+      (vacío)
+      Scope#3<block> parent=2
+        (vacío)
+      Scope#4<block> parent=2
+        (vacío)

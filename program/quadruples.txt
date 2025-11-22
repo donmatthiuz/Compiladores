@@ -1,12 +1,19 @@
 Operador   Op1        Op2        Resultado 
-newarr     4                     t1        
-setelem    t1                    10        
-setelem    t1         1          20        
-setelem    t1         2          30        
-setelem    t1         3          40        
-=          t1                    arr       
-=          2                     i         
-offset     arr        i          t3        
-getelem    arr        t3         t2        
-=          t2                    val       
-print      val                             
+func                             SumaRecursiva
+param                            n_1       
+<=         n_1        0          t1        
+gotof      t1                    L1        
+return     0                               
+goto                             L2        
+label                            L1        
+-          n_1        1          t2        
+arg        t2                              
+call       SumaRecursiva 1          t3        
++          n_1        t3         t4        
+return     t4                              
+label                            L2        
+endfunc                          SumaRecursiva
+arg        8                               
+call       SumaRecursiva 1          t5        
+=          t5                    res       
+print      res                             
